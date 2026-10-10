@@ -17,18 +17,18 @@
 Claude Code에서:
 
 ```
-/plugin marketplace add litmers-dev/pm-dashboard
+/plugin marketplace add dockylitmers/pm-dashboard
 /plugin install pm-dashboard@pm-dashboard
 ```
 
-비공개 저장소라 이 PC의 git이 litmers-dev에 접근할 수 있어야 한다. SSH 키가 없으면 `gh auth login` 뒤 `gh auth setup-git`을 한 번 실행한다. 새 버전은 `/plugin marketplace update pm-dashboard`로 받는다.
+비공개 저장소라 저장소에 초대받은 GitHub 계정으로 이 PC의 git이 접근할 수 있어야 한다(동료는 collaborator로 초대). SSH 키가 없으면 `gh auth login` 뒤 `gh auth setup-git`을 한 번 실행한다. 새 버전은 `/plugin marketplace update pm-dashboard`로 받는다.
 
 스킬 이름은 `/pm-dashboard:pm`이다. 이름을 부르지 않아도 "고객사에 뭐 요청해야 해?", "마감 맞출 수 있어?" 같은 말에 Claude가 이 스킬을 쓴다.
 
 ### B. 개발용 (저장소를 직접 고칠 때)
 
 ```bash
-git clone git@github.com:litmers-dev/pm-dashboard.git
+git clone git@github.com:dockylitmers/pm-dashboard.git
 cd pm-dashboard && ./install.sh
 ```
 
