@@ -1,23 +1,31 @@
 {
   "id": "demo",
-  "sample": true,
   "name": "병원 예약 앱",
   "client": "샘플 고객사",
   "kind": "신규 킥오프",
   "summary": "병원 예약 앱(iOS·Android)과 병원용 관리자 웹",
-  "asOf": "2026-10-10",
-  "forecastConfig": {
-    "baselineEnd": "2026-10-23",
-    "epicLabel": "epic",
-    "descopeLabel": "descope"
-  },
   "dates": {
+    "kickoff": "2026-10-12",
     "devStart": "2026-10-26",
     "devEnd": "2026-12-18",
     "qaStart": "2026-12-21",
     "qaEnd": "2027-01-08",
-    "launch": "2027-01-15",
-    "kickoff": "2026-10-12"
+    "launch": "2027-01-15"
+  },
+  "scope": {
+    "features": [
+      "app",
+      "admin",
+      "payment",
+      "social-kakao",
+      "social-naver",
+      "social-apple",
+      "alimtalk",
+      "push",
+      "content",
+      "support",
+      "marketing"
+    ]
   },
   "receiveDefault": "notion",
   "channels": {
@@ -32,12 +40,16 @@
       "name": "계약·범위"
     },
     {
-      "id": "comms",
-      "name": "소통·운영 방식"
+      "id": "setup",
+      "name": "소통·기본 세팅"
+    },
+    {
+      "id": "business",
+      "name": "사업자·운영 정보"
     },
     {
       "id": "policy",
-      "name": "정책·법무"
+      "name": "정책·약관"
     },
     {
       "id": "accounts",
@@ -57,251 +69,1061 @@
       "id": "contract",
       "cat": "contract",
       "title": "계약서·견적서",
-      "status": "confirmed",
       "ball": "us",
+      "sheet": false,
+      "needBy": "kickoff",
+      "leadDays": 0,
+      "fields": [],
+      "need": "서명한 계약서와 기능 목록이 들어간 최종 견적서",
+      "note": "범위 판단의 1순위 근거",
+      "status": "confirmed",
+      "lib": true,
+      "updated": "2026-10-08",
       "res": {
         "label": "계약 폴더"
       },
+      "history": [
+        {
+          "date": "2026-10-08",
+          "text": "계약 체결"
+        }
+      ]
+    },
+    {
+      "id": "scope",
+      "cat": "contract",
+      "title": "개발 범위(기능 목록) 기준선",
+      "ball": "us",
+      "sheet": false,
+      "needBy": "kickoff",
+      "leadDays": 0,
+      "fields": [],
+      "proposal": "견적서 기능 목록을 범위 기준선으로 쓴다",
+      "status": "received",
+      "lib": true,
       "updated": "2026-10-08",
-      "note": "범위 판단의 1순위 근거"
+      "res": {
+        "label": "최종 견적서 기능 목록"
+      },
+      "history": [
+        {
+          "date": "2026-10-08",
+          "text": "견적서 기능 목록을 기준선 초안으로"
+        }
+      ]
     },
     {
       "id": "srs",
       "cat": "contract",
       "title": "요구사항 명세서(SRS)",
-      "status": "missing",
       "ball": "us",
+      "sheet": true,
+      "needBy": "devStart",
+      "leadDays": 10,
+      "fields": [
+        {
+          "label": "확인 담당자"
+        },
+        {
+          "label": "확인 기한",
+          "proposal": "{devStart} 전"
+        }
+      ],
       "helper": "srs",
-      "due": "2026-10-23",
-      "blocks": "개발 착수",
-      "blocksDate": "2026-10-26",
-      "note": "견적 범위와 회의록으로 초안을 만들고 고객 확인을 받는다"
+      "need": "SRS 초안의 (확인 요청) 항목 답변",
+      "note": "개발사가 초안을 드리고 확인을 받습니다",
+      "mode": "draft",
+      "status": "missing",
+      "lib": true
     },
     {
       "id": "schedule",
       "cat": "contract",
       "title": "일정 합의(개발·QA·출시)",
-      "status": "requested",
       "ball": "client",
-      "requested": "2026-10-06",
-      "blocks": "개발 착수",
-      "blocksDate": "2026-10-26",
-      "need": "개발·QA·출시 일정 확인",
-      "proposal": "개발 10/26~12/18, QA 12/21~1/8, 출시 1/15"
+      "sheet": true,
+      "needBy": "devStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "개발 기간",
+          "proposal": "{devStart}~{devEnd}"
+        },
+        {
+          "label": "고객사 QA 기간",
+          "proposal": "{qaStart}~{qaEnd}"
+        },
+        {
+          "label": "출시일",
+          "proposal": "{launch}"
+        }
+      ],
+      "need": "개발·고객사 QA·출시 일정 확인",
+      "status": "requested",
+      "lib": true,
+      "requested": "2026-10-07",
+      "updated": "2026-10-07",
+      "history": [
+        {
+          "date": "2026-10-07",
+          "text": "고객사 확인 요청 목록으로 요청"
+        }
+      ]
     },
     {
       "id": "acceptance",
       "cat": "contract",
       "title": "검수 기준·하자 보수 기간",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "devStart",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "검수 기간",
+          "proposal": "QA 시작 후 10영업일"
+        },
+        {
+          "label": "통과 기준",
+          "proposal": "중대 버그 0건"
+        },
+        {
+          "label": "하자 보수 기간",
+          "proposal": "출시 후 3개월"
+        }
+      ],
+      "need": "검수 통과 기준과 하자 보수 기간 확인",
+      "proposal": "중대 버그 0건이면 검수 통과, 검수 기간 10영업일, 하자 보수 출시 후 3개월",
       "status": "missing",
-      "ball": "us",
-      "blocks": "고객사 QA",
-      "blocksDate": "2026-12-21",
-      "proposal": "중대 버그 0건, 하자 보수 출시 후 3개월"
+      "lib": true
     },
     {
       "id": "change-request",
       "cat": "contract",
       "title": "변경 요청 절차",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "devStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "요청 창구",
+          "proposal": "요청 DB"
+        },
+        {
+          "label": "처리 방식",
+          "proposal": "영향(일정·비용) 안내 → 승인 → 진행"
+        }
+      ],
+      "need": "범위 밖 요청을 다루는 방법 확인",
+      "proposal": "범위에 없는 요청은 일정·비용 영향을 먼저 안내하고 승인 뒤 진행",
       "status": "missing",
-      "ball": "us",
-      "blocks": "개발 착수",
-      "blocksDate": "2026-10-26",
-      "proposal": "SRS에 없는 기능은 변경 요청으로 받고 일정·비용 영향을 먼저 알림"
+      "lib": true
     },
     {
       "id": "contacts",
-      "cat": "comms",
+      "cat": "setup",
       "title": "고객사 담당자·결정권자",
-      "status": "missing",
-      "ball": "client",
+      "ball": "us",
+      "sheet": true,
+      "needBy": "kickoff",
+      "leadDays": 2,
+      "fields": [
+        {
+          "label": "실무 담당자(이름·연락처)",
+          "answer": "운영팀 김담당"
+        },
+        {
+          "label": "최종 결정권자",
+          "answer": "대표"
+        },
+        {
+          "label": "연락 가능 시간",
+          "proposal": "평일 10~18시"
+        }
+      ],
       "need": "실무 담당자와 최종 결정권자, 연락 가능 시간",
-      "blocks": "개발 착수",
-      "blocksDate": "2026-10-26"
+      "status": "received",
+      "lib": true,
+      "requested": "2026-10-07",
+      "updated": "2026-10-09",
+      "history": [
+        {
+          "date": "2026-10-07",
+          "text": "고객사 확인 요청 목록으로 요청"
+        }
+      ],
+      "answeredAt": "2026-10-09"
     },
     {
       "id": "channel",
-      "cat": "comms",
+      "cat": "setup",
       "title": "고객 소통 채널(요청 DB)",
-      "status": "missing",
-      "ball": "us",
-      "proposal": "Notion 요청 DB 하나로 요청·답·합의를 남긴다"
+      "ball": "client",
+      "sheet": true,
+      "needBy": "kickoff",
+      "leadDays": 1,
+      "fields": [
+        {
+          "label": "소통 채널",
+          "proposal": "요청 DB",
+          "answer": "요청 DB 동의"
+        },
+        {
+          "label": "메신저 사용 여부(O/X)",
+          "answer": "O"
+        }
+      ],
+      "need": "요청·답·합의를 남길 곳 확인",
+      "proposal": "요청 DB 하나에 요청과 답을 남기고 메신저 대화의 결론도 옮겨 적기",
+      "status": "confirmed",
+      "lib": true,
+      "requested": "2026-10-07",
+      "updated": "2026-10-09",
+      "history": [
+        {
+          "date": "2026-10-07",
+          "text": "고객사 확인 요청 목록으로 요청"
+        }
+      ],
+      "answeredAt": "2026-10-09"
     },
     {
       "id": "report",
-      "cat": "comms",
-      "title": "정기 보고(주간 진행상황)",
-      "status": "missing",
+      "cat": "setup",
+      "title": "정기 보고·회의 방식",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "kickoff",
+      "leadDays": 1,
+      "fields": [
+        {
+          "label": "진행 보고",
+          "proposal": "매주 금요일"
+        },
+        {
+          "label": "정기 회의",
+          "proposal": "격주 30분"
+        }
+      ],
+      "need": "보고 주기와 회의 일정 확인",
+      "proposal": "매주 금요일 진행상황 공유, 격주 30분 회의",
+      "status": "requested",
+      "lib": true,
+      "requested": "2026-10-07",
+      "updated": "2026-10-07",
+      "history": [
+        {
+          "date": "2026-10-07",
+          "text": "고객사 확인 요청 목록으로 요청"
+        }
+      ]
+    },
+    {
+      "id": "repo",
+      "cat": "setup",
+      "title": "저장소·접근 권한",
       "ball": "us",
-      "proposal": "매주 월요일 진행상황 카드 + 격주 회의"
+      "sheet": false,
+      "needBy": "devStart",
+      "leadDays": 2,
+      "fields": [],
+      "note": "GitHub 저장소를 정하고 project.json의 github.repo에 적는다",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "labels",
+      "cat": "setup",
+      "title": "이슈 라벨·스프린트 마일스톤",
+      "ball": "us",
+      "sheet": false,
+      "needBy": "devStart",
+      "leadDays": 1,
+      "fields": [],
+      "note": "pm setup-repo로 만든다. 일정 예측이 이 규칙을 쓴다",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "envs",
+      "cat": "setup",
+      "title": "개발·운영 환경 계획",
+      "ball": "dev",
+      "sheet": false,
+      "needBy": "devMid",
+      "leadDays": 5,
+      "fields": [],
+      "note": "개발·검수·운영 서버, 배포 담당, 백업",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "cloud",
+      "cat": "setup",
+      "title": "클라우드·서버 계정",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "devStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "클라우드 서비스",
+          "proposal": "AWS"
+        },
+        {
+          "label": "개발사를 초대할 계정 이메일"
+        },
+        {
+          "label": "2단계 인증 가능 담당자"
+        }
+      ],
+      "need": "서버를 둘 클라우드 계정(고객사 명의)",
+      "proposal": "고객사 명의 계정에 개발사 관리자를 초대",
+      "status": "requested",
+      "lib": true,
+      "requested": "2026-10-07",
+      "updated": "2026-10-07",
+      "history": [
+        {
+          "date": "2026-10-07",
+          "text": "고객사 확인 요청 목록으로 요청"
+        }
+      ]
+    },
+    {
+      "id": "domain",
+      "cat": "setup",
+      "title": "서비스 도메인·DNS 권한",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "devMid",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "사용할 도메인"
+        },
+        {
+          "label": "DNS 관리 업체·담당자"
+        },
+        {
+          "label": "설정 가능 일정"
+        }
+      ],
+      "need": "도메인 구매 여부와 DNS를 바꿀 수 있는 권한",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "business-info",
+      "cat": "business",
+      "title": "사업자 정보·통신판매업 신고번호",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "qaStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "상호(법인명)"
+        },
+        {
+          "label": "사업자등록번호"
+        },
+        {
+          "label": "대표자명"
+        },
+        {
+          "label": "사업장 주소"
+        },
+        {
+          "label": "대표 전화"
+        },
+        {
+          "label": "통신판매업 신고번호"
+        }
+      ],
+      "need": "상호, 대표자, 사업자등록번호, 통신판매업 신고번호, 주소(화면 하단 표시용)",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "cs",
+      "cat": "business",
+      "title": "고객센터 운영 시간·전화번호",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "qaStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "운영 시간",
+          "proposal": "평일 09:00~18:00 (점심 12:00~13:00), 주말·공휴일 휴무"
+        },
+        {
+          "label": "대표 전화번호"
+        }
+      ],
+      "need": "고객에게 안내할 운영 시간과 대표 전화번호",
+      "proposal": "평일 09:00~18:00 (점심 12:00~13:00), 주말·공휴일 휴무",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "cs-email",
+      "cat": "business",
+      "title": "고객 문의 이메일",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "qaStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "문의 이메일"
+        },
+        {
+          "label": "탈퇴 요청 이메일"
+        },
+        {
+          "label": "이메일 확인 담당자"
+        }
+      ],
+      "need": "고객 문의·탈퇴 요청을 받을 이메일",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "privacy-officer",
+      "cat": "business",
+      "title": "개인정보 보호책임자",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "storeSubmit",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "성명"
+        },
+        {
+          "label": "소속·직책"
+        },
+        {
+          "label": "전화"
+        },
+        {
+          "label": "이메일"
+        }
+      ],
+      "need": "처리방침에 적을 보호책임자 이름·직책·연락처(실제 담당자)",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "ops-mail",
+      "cat": "business",
+      "title": "운영 알림 수신 메일",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "qaStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "운영 알림 메일"
+        }
+      ],
+      "need": "주문·오류 알림을 받을 운영 메일 주소 1개",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "admin-accounts",
+      "cat": "business",
+      "title": "관리자 계정·권한",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "qaStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "최고 관리자 이메일"
+        },
+        {
+          "label": "초기 운영자 목록"
+        },
+        {
+          "label": "권한 단계",
+          "proposal": "최고 관리자 / 관리자 두 단계"
+        }
+      ],
+      "need": "관리자로 쓸 사람 수와 권한 단계",
+      "proposal": "최고 관리자 1명 + 관리자 n명 두 단계",
+      "status": "missing",
+      "lib": true
     },
     {
       "id": "terms",
       "cat": "policy",
       "title": "이용약관",
-      "status": "missing",
       "ball": "client",
+      "sheet": true,
+      "needBy": "storeSubmit",
+      "leadDays": 14,
+      "fields": [
+        {
+          "label": "검토 담당자"
+        },
+        {
+          "label": "확인 기한",
+          "proposal": "{storeSubmit} 2주 전"
+        }
+      ],
       "mode": "draft",
-      "blocks": "스토어 심사",
-      "blocksDate": "2027-01-04",
-      "need": "서비스 이용약관 원문",
-      "proposal": "표준 약관 초안을 리트머스가 작성"
+      "need": "서비스 이용약관 확인",
+      "proposal": "표준 약관을 바탕으로 개발사가 초안을 작성",
+      "status": "requested",
+      "lib": true,
+      "requested": "2026-10-07",
+      "updated": "2026-10-07",
+      "history": [
+        {
+          "date": "2026-10-07",
+          "text": "고객사 확인 요청 목록으로 요청"
+        }
+      ]
     },
     {
       "id": "privacy",
       "cat": "policy",
       "title": "개인정보처리방침",
-      "status": "missing",
       "ball": "client",
+      "sheet": true,
+      "needBy": "storeSubmit",
+      "leadDays": 14,
+      "fields": [
+        {
+          "label": "처리 위탁 업체·업무"
+        },
+        {
+          "label": "제3자 제공 여부(O/X)"
+        },
+        {
+          "label": "보관 기간",
+          "proposal": "탈퇴 시 즉시 파기, 거래 기록 5년"
+        },
+        {
+          "label": "검토 담당자"
+        }
+      ],
       "mode": "draft",
-      "blocks": "스토어 심사",
-      "blocksDate": "2027-01-04",
-      "need": "수집 항목·보관 기간·위탁사·보호책임자",
-      "proposal": "앱 기능 기준 초안을 리트머스가 작성"
+      "need": "수집 항목·보관 기간·위탁사 확인",
+      "proposal": "앱 기능 기준으로 개발사가 초안을 작성",
+      "status": "requested",
+      "lib": true,
+      "requested": "2026-10-07",
+      "updated": "2026-10-07",
+      "history": [
+        {
+          "date": "2026-10-07",
+          "text": "고객사 확인 요청 목록으로 요청"
+        }
+      ]
     },
     {
       "id": "refund",
       "cat": "policy",
       "title": "취소·환불 정책",
-      "status": "missing",
       "ball": "client",
+      "sheet": true,
+      "needBy": "devMid",
+      "leadDays": 10,
+      "fields": [
+        {
+          "label": "사용 전 취소",
+          "proposal": "전액 환불"
+        },
+        {
+          "label": "사용 후",
+          "proposal": "환불 불가"
+        },
+        {
+          "label": "예외(부분 사용 등)"
+        }
+      ],
       "mode": "draft",
       "blocks": "결제 개발",
-      "blocksDate": "2026-11-16",
-      "need": "예약 취소 시점별 환불 비율과 노쇼 처리",
-      "proposal": "진료 24시간 전 전액, 이후 50%, 노쇼 환불 없음"
+      "need": "취소 시점별 환불 기준과 예외(부분 사용, 노쇼)",
+      "proposal": "결제 후 사용 전 전액 환불, 사용 후 환불 불가",
+      "status": "missing",
+      "lib": true
     },
     {
-      "id": "medical-notice",
+      "id": "consent",
       "cat": "policy",
-      "title": "의료 정보 고지 문구",
-      "status": "missing",
+      "title": "마케팅 수신 동의 방식",
       "ball": "client",
-      "need": "앱이 진료를 대신하지 않는다는 고지 문구 확인"
+      "sheet": true,
+      "needBy": "devMid",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "마케팅 수신 동의 위치",
+          "proposal": "알림 설정에서 선택 동의"
+        },
+        {
+          "label": "광고성 메시지 발송 계획"
+        }
+      ],
+      "need": "광고성 메시지 동의를 받는 시점과 방법",
+      "proposal": "가입 때는 필수 항목만 고지, 마케팅 수신은 알림 설정에서 선택 동의",
+      "status": "missing",
+      "lib": true
     },
     {
-      "id": "domain",
-      "cat": "accounts",
-      "title": "서비스 도메인",
-      "status": "missing",
+      "id": "age-limit",
+      "cat": "policy",
+      "title": "만 14세 미만 가입",
       "ball": "client",
-      "need": "도메인 구매 여부와 DNS 관리 권한"
-    },
-    {
-      "id": "cloud",
-      "cat": "accounts",
-      "title": "클라우드·서버 계정",
+      "sheet": true,
+      "needBy": "devMid",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "만 14세 미만 가입",
+          "proposal": "제한"
+        }
+      ],
+      "need": "만 14세 미만 가입을 받을지",
+      "proposal": "만 14세 미만 가입 제한 (법정대리인 동의 절차를 두지 않음)",
       "status": "missing",
-      "ball": "client",
-      "blocks": "개발 착수",
-      "blocksDate": "2026-10-26",
-      "proposal": "고객사 명의 계정에 리트머스 관리자 초대"
+      "lib": true
     },
     {
       "id": "apple-dev",
       "cat": "accounts",
-      "title": "Apple Developer 계정",
-      "status": "missing",
+      "title": "Apple Developer 계정(법인)",
       "ball": "client",
-      "blocks": "스토어 심사",
-      "blocksDate": "2027-01-04",
-      "need": "고객사 명의 법인 계정(발급에 2주 이상 걸림)"
+      "sheet": true,
+      "needBy": "storeSubmit",
+      "leadDays": 21,
+      "fields": [
+        {
+          "label": "계정 보유(O/X)"
+        },
+        {
+          "label": "D-U-N-S 번호 발급(O/X)"
+        },
+        {
+          "label": "개발사 계정 초대(O/X)"
+        },
+        {
+          "label": "2단계 인증 가능 담당자"
+        }
+      ],
+      "need": "고객사 명의 법인 계정(D-U-N-S 번호 필요, 발급에 2주 이상)",
+      "proposal": "고객사가 가입하고 개발사 계정을 관리자로 초대",
+      "status": "missing",
+      "lib": true
     },
     {
       "id": "play-console",
       "cat": "accounts",
       "title": "Google Play Console 계정",
-      "status": "missing",
       "ball": "client",
-      "blocks": "스토어 심사",
-      "blocksDate": "2027-01-04",
-      "need": "고객사 명의 계정과 개발자 신원 확인"
+      "sheet": true,
+      "needBy": "storeSubmit",
+      "leadDays": 10,
+      "fields": [
+        {
+          "label": "계정 보유(O/X)"
+        },
+        {
+          "label": "개발자 신원 확인(O/X)"
+        },
+        {
+          "label": "개발사 계정 초대(O/X)"
+        }
+      ],
+      "need": "고객사 명의 계정과 개발자 신원 확인",
+      "proposal": "고객사가 가입하고 개발사 계정을 관리자로 초대",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "pg-test",
+      "cat": "accounts",
+      "title": "결제(PG) 테스트 키",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "devStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "PG사"
+        },
+        {
+          "label": "테스트 키 전달 방법",
+          "proposal": "관리자 권한 초대"
+        }
+      ],
+      "need": "PG사 선택과 테스트 키(개발 시작용)",
+      "status": "requested",
+      "lib": true,
+      "requested": "2026-10-07",
+      "updated": "2026-10-07",
+      "history": [
+        {
+          "date": "2026-10-07",
+          "text": "고객사 확인 요청 목록으로 요청"
+        }
+      ]
     },
     {
       "id": "pg",
       "cat": "accounts",
-      "title": "결제(PG) 계약",
-      "status": "missing",
+      "title": "결제(PG) 계약·운영 키",
       "ball": "client",
-      "blocks": "결제 개발",
-      "blocksDate": "2026-11-16",
-      "need": "PG사 선택과 계약(심사에 2~4주)"
+      "sheet": true,
+      "needBy": "devMid",
+      "leadDays": 28,
+      "fields": [
+        {
+          "label": "계약 상태"
+        },
+        {
+          "label": "라이브 심사 신청일"
+        },
+        {
+          "label": "운영 키 전달 방법",
+          "proposal": "관리자 권한 초대로 개발사가 직접 확인"
+        }
+      ],
+      "blocks": "운영 결제 검증",
+      "need": "PG 계약과 라이브 심사, 운영 키(심사에 2~4주)",
+      "status": "missing",
+      "lib": true
     },
     {
-      "id": "sms",
+      "id": "kakao-channel",
       "cat": "accounts",
-      "title": "문자·알림톡 발송 계정",
-      "status": "missing",
+      "title": "카카오 비즈니스 채널·알림톡 발신프로필",
       "ball": "client",
-      "blocks": "예약 알림",
-      "need": "발신번호 등록, 카카오 채널 개설"
+      "sheet": true,
+      "needBy": "devMid",
+      "leadDays": 14,
+      "fields": [
+        {
+          "label": "채널 이름"
+        },
+        {
+          "label": "채널 개설(O/X)"
+        },
+        {
+          "label": "발신프로필 심사(O/X)"
+        }
+      ],
+      "need": "카카오 비즈니스 채널 개설과 알림톡 발신프로필 심사",
+      "status": "missing",
+      "lib": true
     },
     {
-      "id": "social-login",
+      "id": "social-kakao",
       "cat": "accounts",
-      "title": "소셜 로그인 앱(카카오·네이버·Apple)",
-      "status": "not_needed",
+      "title": "카카오 로그인 앱",
       "ball": "us",
-      "note": "휴대폰 인증 로그인만 사용하기로 함"
+      "sheet": true,
+      "needBy": "devStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "앱 생성(O/X)",
+          "answer": "O"
+        },
+        {
+          "label": "개발사 팀원 초대(O/X)"
+        },
+        {
+          "label": "로그인 때 받을 정보",
+          "proposal": "이메일, 닉네임"
+        }
+      ],
+      "need": "Kakao Developers에 고객사 명의 앱",
+      "proposal": "고객사가 앱을 만들고 개발사 계정을 팀원으로 초대",
+      "status": "received",
+      "lib": true,
+      "requested": "2026-10-07",
+      "updated": "2026-10-09",
+      "history": [
+        {
+          "date": "2026-10-07",
+          "text": "고객사 확인 요청 목록으로 요청"
+        }
+      ],
+      "answeredAt": "2026-10-09"
+    },
+    {
+      "id": "social-naver",
+      "cat": "accounts",
+      "title": "네이버 로그인 앱·검수",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "devStart",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "앱 생성(O/X)"
+        },
+        {
+          "label": "앱 이름"
+        },
+        {
+          "label": "로그인 때 받을 정보",
+          "proposal": "이메일, 이름"
+        },
+        {
+          "label": "검수 신청(O/X)"
+        }
+      ],
+      "need": "네이버 개발자센터 고객사 명의 앱(운영 전 검수 신청 필요)",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "social-apple",
+      "cat": "accounts",
+      "title": "Apple 로그인 설정",
+      "ball": "us",
+      "sheet": true,
+      "needBy": "devStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "로그인 키 발급(O/X)"
+        }
+      ],
+      "need": "Apple Developer 계정 권한(로그인 키 발급)",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "push",
+      "cat": "accounts",
+      "title": "앱 푸시 설정",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "devMid",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "Firebase 프로젝트(O/X)"
+        },
+        {
+          "label": "개발사 초대(O/X)"
+        },
+        {
+          "label": "iOS 푸시 키 등록(O/X)"
+        }
+      ],
+      "need": "Firebase 프로젝트와 iOS 푸시 인증 키",
+      "proposal": "계정 권한을 주시면 개발사가 등록",
+      "status": "missing",
+      "lib": true
     },
     {
       "id": "brand",
       "cat": "design",
       "title": "로고·브랜드 가이드",
-      "status": "requested",
       "ball": "client",
+      "sheet": true,
+      "needBy": "devStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "로고 원본(AI·SVG)"
+        },
+        {
+          "label": "앱 아이콘"
+        },
+        {
+          "label": "메인 컬러"
+        },
+        {
+          "label": "폰트"
+        }
+      ],
+      "need": "로고 원본(AI·SVG), 브랜드 컬러, 폰트",
+      "status": "requested",
+      "lib": true,
       "requested": "2026-10-07",
-      "need": "로고 원본(AI·SVG), 브랜드 컬러, 폰트"
+      "updated": "2026-10-07",
+      "history": [
+        {
+          "date": "2026-10-07",
+          "text": "고객사 확인 요청 목록으로 요청"
+        }
+      ]
     },
     {
-      "id": "figma",
+      "id": "design-files",
       "cat": "design",
       "title": "화면 설계(Figma)",
-      "status": "missing",
       "ball": "us",
-      "blocks": "개발 착수",
-      "blocksDate": "2026-10-26",
-      "proposal": "리트머스 디자이너가 와이어프레임부터 작성"
+      "sheet": false,
+      "needBy": "devStart",
+      "leadDays": 10,
+      "fields": [],
+      "status": "missing",
+      "lib": true
     },
     {
       "id": "store-assets",
       "cat": "design",
       "title": "앱 아이콘·스토어 이미지·설명",
-      "status": "missing",
       "ball": "client",
-      "blocks": "스토어 심사",
-      "blocksDate": "2027-01-04"
+      "sheet": true,
+      "needBy": "storeSubmit",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "앱 이름"
+        },
+        {
+          "label": "짧은 설명"
+        },
+        {
+          "label": "상세 설명"
+        },
+        {
+          "label": "키워드"
+        }
+      ],
+      "need": "앱 이름, 짧은 설명, 아이콘, 스크린샷에 쓸 문구",
+      "proposal": "개발사가 스크린샷을 만들고 설명 초안을 드림",
+      "status": "missing",
+      "lib": true
     },
     {
-      "id": "cs",
-      "cat": "ops",
-      "title": "고객센터 운영 시간·연락처",
-      "status": "missing",
+      "id": "content",
+      "cat": "design",
+      "title": "운영 콘텐츠(공지·FAQ·안내 문구)",
       "ball": "client",
-      "proposal": "평일 09~18시"
+      "sheet": true,
+      "needBy": "qaStart",
+      "leadDays": 10,
+      "fields": [
+        {
+          "label": "공지"
+        },
+        {
+          "label": "FAQ"
+        },
+        {
+          "label": "이용 안내"
+        }
+      ],
+      "need": "출시 때 올릴 공지·FAQ 실제 문구",
+      "proposal": "개발사가 초안을 넣고 고객사가 수정",
+      "status": "missing",
+      "lib": true
     },
     {
-      "id": "admin",
-      "cat": "ops",
-      "title": "관리자 계정·권한",
-      "status": "missing",
-      "ball": "client",
-      "need": "병원 관리자 계정 수와 권한 단계"
-    },
-    {
-      "id": "test-account",
-      "cat": "ops",
-      "title": "QA·심사용 테스트 계정",
-      "status": "missing",
+      "id": "messages",
+      "cat": "design",
+      "title": "고객 발송 문안(문자·알림톡·메일·푸시)",
       "ball": "us",
-      "blocks": "스토어 심사",
-      "blocksDate": "2027-01-04"
+      "sheet": true,
+      "needBy": "qaStart",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "확인 담당자"
+        }
+      ],
+      "mode": "draft",
+      "need": "상황별 발송 문안 확인",
+      "proposal": "개발사가 상황별 문안 초안을 드리고 고객사가 확인",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "qa-plan",
+      "cat": "ops",
+      "title": "고객사 QA 계획·테스트 계정",
+      "ball": "us",
+      "sheet": true,
+      "needBy": "qaStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "QA 참여자"
+        },
+        {
+          "label": "QA 기간",
+          "proposal": "{qaStart}~{qaEnd}"
+        }
+      ],
+      "need": "QA 참여자와 기간 확인",
+      "proposal": "개발사가 QA 체크리스트와 테스트 계정을 드리고, 발견한 문제는 요청 DB로 받기",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "review-account",
+      "cat": "ops",
+      "title": "스토어 심사용 테스트 계정",
+      "ball": "us",
+      "sheet": false,
+      "needBy": "storeSubmit",
+      "leadDays": 3,
+      "fields": [],
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "launch-plan",
+      "cat": "ops",
+      "title": "출시 방식·공지",
+      "ball": "us",
+      "sheet": true,
+      "needBy": "launch",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "출시 방식",
+          "proposal": "심사 통과 뒤 {launch} 수동 출시"
+        },
+        {
+          "label": "공지 일정"
+        }
+      ],
+      "need": "출시 방식과 공지 일정 확인",
+      "proposal": "심사 통과 뒤 정한 날짜에 수동 출시",
+      "status": "missing",
+      "lib": true
+    },
+    {
+      "id": "maintenance",
+      "cat": "ops",
+      "title": "출시 후 유지보수·운영 지원",
+      "ball": "client",
+      "sheet": true,
+      "needBy": "launch",
+      "leadDays": 14,
+      "fields": [
+        {
+          "label": "유지보수 계약(O/X)"
+        },
+        {
+          "label": "지원 범위"
+        }
+      ],
+      "need": "하자 보수 이후 유지보수 계약 여부와 범위",
+      "status": "missing",
+      "lib": true
     }
   ],
   "decisions": [
     {
       "title": "로그인 방식",
-      "recommend": "휴대폰 인증 로그인만 (소셜 로그인은 2차)",
+      "recommend": "카카오·네이버·Apple 로그인, 이메일 가입은 2차",
       "due": "킥오프 회의"
     }
   ],
@@ -309,83 +1131,11 @@
     {
       "title": "스토어 계정 발급 지연",
       "level": "mid",
-      "detail": "Apple 법인 계정은 발급에 2주 이상 걸림",
+      "detail": "Apple 법인 계정은 D-U-N-S 번호 발급까지 2주 이상 걸림",
       "mitigation": "킥오프 주에 고객사 명의로 신청 요청"
     }
   ],
-  "srs": {
-    "exists": false,
-    "platforms": [
-      "app",
-      "admin",
-      "server"
-    ],
-    "roles": [
-      "환자(회원)",
-      "보호자",
-      "병원 관리자",
-      "리트머스 운영자"
-    ],
-    "featureSource": "예약 앱 표준 기능 묶음 (제안)",
-    "features": [
-      {
-        "id": "auth",
-        "name": "회원가입·로그인",
-        "desc": "휴대폰 인증, 보호자 연결",
-        "status": "prop"
-      },
-      {
-        "id": "search",
-        "name": "병원·진료과 찾기",
-        "desc": "지역·진료과 검색, 병원 상세",
-        "status": "prop"
-      },
-      {
-        "id": "booking",
-        "name": "예약 신청·변경·취소",
-        "desc": "시간대 선택, 대기 순번",
-        "status": "prop"
-      },
-      {
-        "id": "payment",
-        "name": "예약금 결제·환불",
-        "desc": "PG 결제, 취소 시점별 환불",
-        "status": "ask"
-      },
-      {
-        "id": "notify",
-        "name": "예약 알림",
-        "desc": "알림톡·앱 푸시 리마인드",
-        "status": "prop"
-      },
-      {
-        "id": "review",
-        "name": "진료 후기",
-        "desc": "별점·후기, 신고",
-        "status": "ask"
-      },
-      {
-        "id": "admin-booking",
-        "name": "관리자 예약 관리",
-        "desc": "시간표, 예약 승인·취소, 노쇼 처리",
-        "status": "prop"
-      },
-      {
-        "id": "admin-stats",
-        "name": "관리자 통계",
-        "desc": "예약·매출·노쇼율",
-        "status": "prop"
-      }
-    ]
-  },
   "resources": [
-    {
-      "id": "github",
-      "name": "GitHub 저장소·이슈",
-      "glyph": "GH",
-      "desc": "킥오프 뒤 저장소를 만들고 연결",
-      "url": ""
-    },
     {
       "id": "requests",
       "name": "고객 요청 DB",
@@ -408,30 +1158,133 @@
       "url": ""
     }
   ],
-  "phases": [
-    {
-      "name": "킥오프·준비",
-      "kind": "kickoff",
-      "start": "2026-10-12",
-      "end": "2026-10-23"
-    },
-    {
-      "name": "개발",
-      "kind": "dev",
-      "start": "2026-10-26",
-      "end": "2026-12-18"
-    },
-    {
-      "name": "고객사 QA",
-      "kind": "qa",
-      "start": "2026-12-21",
-      "end": "2027-01-08"
-    },
-    {
-      "name": "스토어 심사",
-      "kind": "review",
-      "start": "2027-01-04",
-      "end": "2027-01-13"
-    }
-  ]
+  "srs": {
+    "exists": false,
+    "platforms": [
+      "app",
+      "admin",
+      "server"
+    ],
+    "roles": [
+      "비회원",
+      "회원",
+      "관리자"
+    ],
+    "features": []
+  },
+  "asOf": "2026-10-10",
+  "contract": {
+    "signedAt": "2026-10-08",
+    "review": [
+      {
+        "id": "scope-annex",
+        "title": "범위 부속서(기능 목록)가 계약에 붙어 있다",
+        "why": "범위 다툼의 1순위 근거. 없으면 검수 때 버그와 추가 요청을 나눌 수 없다",
+        "status": "ok",
+        "note": ""
+      },
+      {
+        "id": "acceptance",
+        "title": "검수 방법·기간·통과 기준이 있다",
+        "why": "검수 기간 안에 이의가 없으면 완료로 보는 조항이 없으면 잔금이 끝없이 밀린다",
+        "status": "risk",
+        "note": "검수 기간이 적혀 있지 않음"
+      },
+      {
+        "id": "payment-terms",
+        "title": "대금 지급 단계와 조건이 검수와 연결돼 있다",
+        "why": "착수금·중도금·잔금과 각 지급 조건(계약, 중간 검수, 최종 검수)",
+        "status": "ok",
+        "note": ""
+      },
+      {
+        "id": "change-pricing",
+        "title": "변경 요청 절차와 비용 산정 방식이 있다",
+        "why": "범위 밖 요청을 무상으로 떠안지 않게 단가나 산정 방식을 정한다",
+        "status": "unchecked",
+        "note": ""
+      },
+      {
+        "id": "delay-liability",
+        "title": "고객사 자료·결정 지연 시 일정 순연 조항이 있다",
+        "why": "고객사 대기(공이 고객사에 있는 기간)만큼 일정이 늦어지는 근거",
+        "status": "missing",
+        "note": "고객사 자료 지연 시 일정 순연 조항 없음 — 회의에서 합의 기록 남기기"
+      },
+      {
+        "id": "deliverables",
+        "title": "산출물·소스코드·계정 인도 범위와 시점이 있다",
+        "why": "무엇을 언제 넘기는지(소스, 문서, 관리자·스토어 계정 명의)",
+        "status": "unchecked",
+        "note": ""
+      },
+      {
+        "id": "ip",
+        "title": "지식재산권 귀속과 예외가 정해져 있다",
+        "why": "오픈소스·기존 자산(재사용 모듈)은 예외로 두는지",
+        "status": "unchecked",
+        "note": ""
+      },
+      {
+        "id": "warranty",
+        "title": "하자 보수 기간과 범위가 있다",
+        "why": "무상 하자 보수와 유상 유지보수의 경계",
+        "status": "unchecked",
+        "note": ""
+      },
+      {
+        "id": "maintenance",
+        "title": "출시 후 유지보수·운영 지원을 따로 정했다",
+        "why": "하자 보수 이후 지원이 무상으로 이어지지 않게",
+        "status": "unchecked",
+        "note": ""
+      },
+      {
+        "id": "third-party-costs",
+        "title": "제3자 비용(서버·유료 API·스토어 계정) 부담 주체가 있다",
+        "why": "운영 비용이 누구 명의·부담인지",
+        "status": "unchecked",
+        "note": ""
+      },
+      {
+        "id": "privacy-outsourcing",
+        "title": "개인정보 처리 위탁·비밀유지 조항이 있다",
+        "why": "개발·운영 중 고객 개인정보를 다루면 처리 위탁 계약이 필요하다",
+        "status": "unchecked",
+        "note": ""
+      },
+      {
+        "id": "termination",
+        "title": "계약 해지와 중도 정산 기준이 있다",
+        "why": "중단 시 진행분 정산 방법",
+        "status": "unchecked",
+        "note": ""
+      }
+    ],
+    "payments": [
+      {
+        "name": "착수금",
+        "ratio": 30,
+        "trigger": "계약 체결",
+        "anchor": "kickoff",
+        "status": "paid",
+        "paidAt": "2026-10-09"
+      },
+      {
+        "name": "중도금",
+        "ratio": 40,
+        "trigger": "개발 완료(중간 검수)",
+        "anchor": "devEnd",
+        "status": "planned"
+      },
+      {
+        "name": "잔금",
+        "ratio": 30,
+        "trigger": "최종 검수 완료",
+        "anchor": "qaEnd",
+        "status": "planned"
+      }
+    ]
+  },
+  "sample": true
 }

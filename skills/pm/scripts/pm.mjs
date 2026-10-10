@@ -2,130 +2,28 @@
 /**
  * pm — 외주 개발 프로젝트 PM 도구. Node 18 이상, 설치할 의존성 없음.
  *
- * 프로젝트 데이터는 고객사 저장소가 아니라 PM_DASHBOARD_HOME(기본 ~/.pm-dashboard)에 둔다.
- *   <home>/config.json                 회사 이름 등 공통 설정
- *   <home>/projects/<id>/project.json  일정·체크리스트·결정·위험·리소스 (사람과 Claude가 고친다)
- *   <home>/projects/<id>/github.json   이슈·마일스톤 스냅샷 (pm sync가 만든다)
- *   <home>/build/                      pm build 결과
- *
- * 명령은 `pm help`를 본다.
+ * PM이 만든 비공개 저장소를 내려받아 `pm setup`하면 그 폴더가 워크스페이스가 되고,
+ * 모든 프로젝트를 그 안에서 관리한다(lib/workspace.mjs). 명령은 `pm help`.
  */
-import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
-import http from "node:http";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { BALLS, Core, DATE_RE, Docs, F, fmt, gitRemoteRepo, ID_RE, list, openFile, pad, parseArgs, parseDate, SKILL_DIR, today, UsageError } from "./lib/common.mjs";
+import { dashboardHtml } from "./lib/build.mjs";
+import { setupRepo, sync } from "./lib/github.mjs";
+import { applyScope, library, newProject } from "./lib/library.mjs";
+import { markSent, serve } from "./lib/server.mjs";
+import { locate, registered, setup, Workspace } from "./lib/workspace.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const SKILL_DIR = path.resolve(here, "..");
-const APP_DIR = path.join(SKILL_DIR, "app");
-const TEMPLATE_DIR = path.join(SKILL_DIR, "templates");
-const require = createRequire(import.meta.url);
-const F = require(path.join(APP_DIR, "js", "forecast.js"));
-const Core = require(path.join(APP_DIR, "js", "core.js"));
-
-const HOME = process.env.PM_DASHBOARD_HOME || path.join(os.homedir(), ".pm-dashboard");
-const PROJECTS_DIR = path.join(HOME, "projects");
-const BALLS = ["client", "us", "dev"];
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
-const today = () => F.kstDate(new Date());
-
-// ---------------------------------------------------------------- 공통
-
-class UsageError extends Error {}
-
-function parseArgs(argv) {
-  const args = { _: [] };
-  for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i];
-    if (!token.startsWith("--")) {
-      args._.push(token);
-      continue;
-    }
-    const [key, inline] = token.slice(2).split(/=(.*)/s);
-    if (inline !== undefined) args[key] = inline;
-    else if (argv[i + 1] !== undefined && !argv[i + 1].startsWith("--")) args[key] = argv[++i];
-    else args[key] = true;
-  }
-  return args;
-}
-
-const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
-function writeJson(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`);
-  fs.renameSync(tmp, file);
-}
-
-const projectDir = (id) => path.join(PROJECTS_DIR, id);
-const projectFile = (id) => path.join(projectDir(id), "project.json");
-const githubFile = (id) => path.join(projectDir(id), "github.json");
-
-function config() {
-  const file = path.join(HOME, "config.json");
-  return { company: "우리 회사", ...(fs.existsSync(file) ? readJson(file) : {}) };
-}
-
-function listProjectIds() {
-  if (!fs.existsSync(PROJECTS_DIR)) return [];
-  return fs
-    .readdirSync(PROJECTS_DIR)
-    .filter((id) => fs.existsSync(projectFile(id)))
-    .sort();
-}
-
-function loadProject(id) {
-  if (!fs.existsSync(projectFile(id))) throw new UsageError(`프로젝트 ${id}가 없습니다. pm list-projects로 확인하세요.`);
-  return readJson(projectFile(id));
-}
-
-function gitRemoteRepo(cwd = process.cwd()) {
-  try {
-    const url = execFileSync("git", ["remote", "get-url", "origin"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-    const match = url.match(/github[^:/]*[:/]([^/]+\/[^/]+?)(?:\.git)?$/);
-    return match ? match[1] : null;
-  } catch {
-    return null;
-  }
-}
-
-// --project가 없으면 지금 폴더의 git 저장소와 연결된 프로젝트, 하나뿐이면 그 프로젝트
-function resolveProjectId(args) {
-  if (typeof args.project === "string") return args.project;
-  const ids = listProjectIds();
-  if (!ids.length) throw new UsageError("등록된 프로젝트가 없습니다. pm init <id>로 만드세요.");
-  const repo = gitRemoteRepo()?.toLowerCase();
-  if (repo) {
-    const matched = ids.filter((id) => {
-      const p = readJson(projectFile(id));
-      return [p.github?.repo, ...(p.repos || [])].some((r) => r?.toLowerCase() === repo);
-    });
-    if (matched.length === 1) return matched[0];
-  }
-  if (ids.length === 1) return ids[0];
-  throw new UsageError(`어느 프로젝트인지 모르겠습니다. --project <id>를 붙이세요: ${ids.join(", ")}`);
-}
-
-function githubToken() {
-  const fromEnv = process.env.GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim();
-  if (fromEnv) return fromEnv;
-  try {
-    return execFileSync("gh", ["auth", "token"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-  } catch {
-    throw new UsageError("GitHub 토큰이 없습니다. gh auth login 하거나 GITHUB_TOKEN을 설정하세요.");
-  }
-}
+const commands = {};
+const ws = (args) => Workspace.open(args);
 
 // 예측까지 계산한 모델. 스냅샷이 없으면 forecast는 null
-function buildModel(id, scenario) {
-  const project = Core.normalize(loadProject(id), today());
+function buildModel(w, id, scenario) {
+  const project = Core.normalize(w.load(id), today());
   let forecast = null;
-  if (project.github && fs.existsSync(githubFile(id))) {
-    const gh = readJson(githubFile(id));
+  const gh = project.github ? w.github(id) : null;
+  if (gh) {
     const issues = F.normalizeIssues(gh.issues);
     forecast = F.compute({ issues, milestones: gh.milestones, now: new Date(gh.syncedAt).getTime(), config: project.forecastConfig, scenario: scenario || {} });
     forecast.syncedAt = gh.syncedAt;
@@ -133,119 +31,185 @@ function buildModel(id, scenario) {
   }
   return Core.model(project, { forecast, queue: project.queue || [], today: today() });
 }
-
-function openFile(target) {
-  const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
-  const args = process.platform === "win32" ? ["/c", "start", "", target] : [target];
-  spawn(command, args, { detached: true, stdio: "ignore" }).unref();
-}
-
-const pad = (text, width) => {
-  const str = String(text ?? "");
-  const visible = [...str].reduce((w, ch) => w + (/[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1), 0);
-  return str + " ".repeat(Math.max(0, width - visible));
+const target = (args) => {
+  const w = ws(args);
+  return { w, id: w.resolveId(args, gitRemoteRepo()) };
 };
-const fmt = (n) => (n == null || Number.isNaN(n) ? "-" : Math.round(n).toLocaleString("ko-KR"));
-function syncAge(iso) {
+const syncAge = (iso) => {
   const hours = (Date.now() - new Date(iso).getTime()) / 3_600_000;
   return hours < 1 ? "1시간 안" : hours < 48 ? `${Math.round(hours)}시간 전` : `${Math.round(hours / 24)}일 전`;
-}
-
-// ---------------------------------------------------------------- 명령
-
-const commands = {};
+};
 
 commands.help = () => {
-  console.log(`pm — 외주 개발 프로젝트 PM 도구 (데이터: ${HOME})
+  console.log(`pm — 외주 개발 프로젝트 PM 도구
+
+시작 (PM 한 사람당 한 번)
+  setup [폴더] [--company 회사] [--import ~/.pm-dashboard]
+                                  내려받은 PM 저장소를 워크스페이스로 만든다
+  workspace                       지금 쓰는 워크스페이스와 프로젝트
+  config [key [value]]            공통 설정 (company: 회사 이름)
+  install-cli                     터미널에서 쓸 pm 명령을 ~/.local/bin에 만든다
 
 프로젝트
-  init <id> [--name 이름] [--client 고객사] [--repo owner/repo] [--from standard|sample]
+  init <id> --name 이름 --client 고객사 [--repo owner/repo] [--scope app,admin,payment,...]
             [--kickoff D] [--dev-start D] [--dev-end D] [--qa-start D] [--qa-end D] [--launch D]
-  list-projects                     등록된 프로젝트
-  where [--project id]              데이터 위치
-  config [key [value]]              공통 설정 (company: 회사 이름)
-  validate [--project id | --all]   project.json 점검
+            [--from sample]       새 프로젝트 (범위로 체크리스트·요청 목록이 정해진다)
+  scope [--list] [--set a,b] [--add a] [--remove b]   개발 범위(플랫폼·기능) 보기·바꾸기
+  projects                        등록된 프로젝트
+  validate [--all]                project.json 점검
 
-현황
-  sync [--project id | --all]       GitHub 이슈·마일스톤 스냅샷 받기
-  status [--project id] [--json]    브리핑·예측·준비율·고객사 대기
-  forecast [--velocity %] [--inflow %] [--descope n] [--json]   가정을 바꿔 예측
+킥오프·현황
+  status [--json]                 브리핑·킥오프 단계·예측·고객사 대기
+  kickoff [--json]                킥오프 4단계와 이번 주 할 일
+  kickoff-kit [--internal] [--save]   킥오프 회의 자료 (안건·요청·첫 2주 계획)
+  report [--client] [--save]      주간 진행상황 보고 초안
+  sync [--all]                    GitHub 이슈·마일스톤 스냅샷
+  forecast [--velocity %] [--inflow %] [--descope n]   가정을 바꿔 일정 예측
+  setup-repo [--apply]            GitHub 라벨·스프린트 마일스톤 (기본은 계획만 보여 줌)
 
-체크리스트
-  list [--status s] [--ball client|us|dev] [--cat c] [--json]
-  set <item> [--status s] [--ball b] [--requested today|D] [--due D] [--res-label t] [--res-url u]
-             [--note t] [--need t] [--proposal t] [--log 기록]
+고객사 요청
+  sheet [--format md|notion] [--only-new] [--save] [--mark-sent [--date D]]
+                                  고객사 확인 요청 목록 (분홍=제안값, 노랑=고객사 답)
+  answer <item> "라벨=값" ... [--note 답] [--confirm]   고객사 답 기록
   request <item> [--receive notion|drive|email|repo] [--mode ask|draft|meeting] [--due D] [--queue]
-                                    고객사 요청서(요청함이면 리마인드) 초안. 보내지 않는다
+                                  항목 하나의 요청서·리마인드 초안 (보내지 않음)
+  list [--status s] [--ball client|us|dev] [--cat c] [--json]
+  set <item> [--status s] [--ball b] [--requested today|D] [--due D] [--res-label t] [--res-url u] [--log 기록]
+
+계약
+  contract                        계약 점검·대금 단계 보기
+  contract check <id> --status ok|risk|missing|na [--note 메모]
+  contract pay <이름> --status invoiced|paid [--date D]
+  contract signed --date D
 
 대시보드
   build [--project id] [--client] [--out 파일] [--open]   한 파일 HTML (--client: 고객사 공유본)
-  serve [--port 4477] [--open]      로컬 서버. 화면에서 바꾼 상태를 project.json에 저장
+  serve [--port 4477] [--open]    로컬 서버. 화면에서 바꾼 상태를 project.json에 저장
 
-D는 YYYY-MM-DD. --project를 빼면 지금 폴더의 git 저장소와 연결된 프로젝트를 쓴다.`);
+D는 YYYY-MM-DD. --project를 빼면 지금 폴더의 git 저장소와 연결된 프로젝트를 쓴다.
+--workspace 폴더로 워크스페이스를 직접 정할 수 있다.`);
 };
 
-commands["list-projects"] = () => {
-  const ids = listProjectIds();
+// ---------------------------------------------------------------- 시작
+
+commands.setup = (args) => {
+  const dir = path.resolve(args._[0] || process.cwd());
+  const importFrom = typeof args.import === "string" ? args.import.replace(/^~(?=\/|$)/, os.homedir()) : null;
+  const result = setup(dir, { company: typeof args.company === "string" ? args.company : undefined, importFrom });
+  console.log(`${result.existed ? "워크스페이스를 갱신했습니다" : "워크스페이스를 만들었습니다"}: ${dir}`);
+  if (result.imported.length) console.log(`- 가져온 프로젝트: ${result.imported.join(", ")}`);
+  if (!result.isGit) console.log("- git 저장소가 아닙니다. GitHub에 비공개 저장소를 만들고 내려받은 폴더에서 쓰기를 권합니다.");
+  else if (!result.remote) console.log("- 원격 저장소가 없습니다. GitHub 비공개 저장소를 origin으로 연결하세요.");
+  if (result.visibility === "PUBLIC") console.log("! 이 저장소는 공개(PUBLIC)입니다. 고객 정보가 들어가니 비공개로 바꾸세요: gh repo edit --visibility private");
+  else if (result.visibility) console.log(`- 원격 저장소: ${result.visibility.toLowerCase()}`);
+  if (!importFrom && fs.existsSync(path.join(os.homedir(), ".pm-dashboard", "projects")) && dir !== path.join(os.homedir(), ".pm-dashboard"))
+    console.log("- 예전 위치(~/.pm-dashboard)에 프로젝트가 있습니다. 옮기려면: pm setup --import ~/.pm-dashboard");
+  console.log("- 이제 어느 폴더에서든 pm이 이 워크스페이스를 씁니다.");
+  console.log("- 다음: pm init <id> ... → git add -A && git commit -m 'pm: <id> 등록' && git push");
+};
+
+commands.workspace = (args) => {
+  const found = locate(args);
+  if (!found) return console.log("워크스페이스가 없습니다. PM 저장소를 내려받은 폴더에서 pm setup을 실행하세요.");
+  const w = new Workspace(found.dir, found.source);
+  console.log(`워크스페이스  ${w.dir} (${w.source})`);
+  console.log(`회사         ${w.config.company}`);
+  if (registered() && registered() !== w.dir) console.log(`등록된 곳     ${registered()}`);
+  commands.projects(args);
+};
+
+commands.projects = (args) => {
+  const w = ws(args);
+  const ids = w.ids();
   if (!ids.length) return console.log("등록된 프로젝트가 없습니다. pm init <id>로 만드세요.");
   for (const id of ids) {
-    const p = readJson(projectFile(id));
+    const p = w.load(id);
     console.log(`${pad(id, 22)}${pad(p.name, 24)}${p.client || ""}${p.github?.repo ? ` · ${p.github.repo}` : ""}`);
   }
 };
-
-commands.where = (args) => {
-  console.log(`home     ${HOME}`);
-  if (!listProjectIds().length) return;
-  const id = resolveProjectId(args);
-  console.log(`project  ${projectFile(id)}`);
-  console.log(`github   ${githubFile(id)}${fs.existsSync(githubFile(id)) ? "" : " (아직 없음)"}`);
-};
+commands["list-projects"] = commands.projects;
+commands.where = commands.workspace;
 
 commands.config = (args) => {
-  const file = path.join(HOME, "config.json");
-  const current = fs.existsSync(file) ? readJson(file) : {};
+  const w = ws(args);
   const [key, value] = args._;
-  if (!key) return console.log(JSON.stringify(config(), null, 2));
-  if (value === undefined) return console.log(config()[key] ?? "");
-  writeJson(file, { ...current, [key]: value });
+  if (!key) return console.log(JSON.stringify(w.config, null, 2));
+  if (value === undefined) return console.log(w.config[key] ?? "");
+  w.setConfig({ [key]: value });
   console.log(`${key} = ${value}`);
 };
 
+commands["install-cli"] = () => {
+  const bin = process.env.PM_BIN_DIR || path.join(os.homedir(), ".local", "bin");
+  fs.mkdirSync(bin, { recursive: true });
+  // 플러그인은 버전마다 폴더가 바뀌므로, 실행할 때 가장 새 버전을 찾는다
+  const cache = path.join(os.homedir(), ".claude", "plugins", "cache", "pm-dashboard", "pm-dashboard");
+  const script = `#!/usr/bin/env bash
+latest="$(ls -d "${cache}"/*/skills/pm/scripts/pm.mjs 2>/dev/null | sort -V | tail -1)"
+exec node "\${latest:-${path.join(SKILL_DIR, "scripts", "pm.mjs")}}" "$@"
+`;
+  fs.writeFileSync(path.join(bin, "pm"), script, { mode: 0o755 });
+  console.log(`만들었습니다: ${path.join(bin, "pm")}`);
+  if (!(process.env.PATH || "").split(":").includes(bin)) console.log(`PATH에 ${bin}을 추가하세요.`);
+};
+
+// ---------------------------------------------------------------- 프로젝트
+
 commands.init = (args) => {
+  const w = ws(args);
   const [id] = args._;
   if (!id || !ID_RE.test(id)) throw new UsageError("pm init <id> — id는 영문 소문자·숫자·하이픈 (예: my-app)");
-  if (fs.existsSync(projectFile(id)) && !args.force) throw new UsageError(`${projectFile(id)}가 이미 있습니다. 덮어쓰려면 --force`);
-  const from = args.from || "standard";
-  const templateFile = path.join(TEMPLATE_DIR, from === "sample" ? "sample-project.json" : "project.json");
-  const project = readJson(templateFile);
-  project.id = id;
-  if (args.name) project.name = args.name;
-  else if (from !== "sample") project.name = id;
-  if (args.client) project.client = args.client;
-  const repo = typeof args.repo === "string" ? args.repo : from === "sample" ? null : gitRemoteRepo();
-  if (repo) project.github = { repo };
-  const dateArgs = { kickoff: "kickoff", devStart: "dev-start", devEnd: "dev-end", qaStart: "qa-start", qaEnd: "qa-end", launch: "launch" };
-  for (const [field, flag] of Object.entries(dateArgs)) {
-    if (args[flag] === undefined) continue;
-    if (!DATE_RE.test(args[flag])) throw new UsageError(`--${flag}는 YYYY-MM-DD`);
-    project.dates = { ...project.dates, [field]: args[flag] };
+  if (fs.existsSync(w.projectFile(id)) && !args.force) throw new UsageError(`${w.projectFile(id)}가 이미 있습니다. 덮어쓰려면 --force`);
+  const dateFlags = { kickoff: "kickoff", devStart: "dev-start", devEnd: "dev-end", qaStart: "qa-start", qaEnd: "qa-end", launch: "launch", storeSubmit: "store-submit" };
+  const dates = {};
+  for (const [field, flag] of Object.entries(dateFlags)) if (args[flag] !== undefined) dates[field] = parseDate(args[flag], flag);
+  const repo = typeof args.repo === "string" ? args.repo : args.from === "sample" ? null : gitRemoteRepo();
+  const project = newProject({ id, name: args.name, client: args.client, repo, dates, features: list(args.scope), from: args.from });
+  w.save(id, project);
+  const counted = project.checklist.filter((i) => i.status !== "not_needed");
+  console.log(`만들었습니다: ${w.projectFile(id)}`);
+  console.log(`- 범위: ${(project.scope?.features || []).join(", ") || "(없음) → pm scope --set app,admin,... 로 고르세요"}`);
+  console.log(`- 체크리스트 ${counted.length}개 · 고객사 확인 요청 ${counted.filter((i) => i.sheet).length}개${repo ? ` · GitHub ${repo}` : ""}`);
+  const missing = ["devStart", "devEnd", "qaStart", "qaEnd", "launch"].filter((k) => !project.dates?.[k]);
+  if (missing.length) console.log(`- 아직 없는 날짜: ${missing.join(", ")} → 날짜가 있어야 요청 시작일이 계산된다`);
+  console.log("- 다음: pm kickoff → pm sheet → pm kickoff-kit");
+};
+
+commands.scope = (args) => {
+  const lib = library();
+  if (args.list) {
+    let group = null;
+    for (const f of lib.features) {
+      if (f.group !== group) console.log(`\n${(group = f.group)}`);
+      console.log(`  ${pad(f.key, 16)}${f.label}${f.note ? ` — ${f.note}` : ""}`);
+    }
+    return;
   }
-  if (from !== "sample") project.asOf = today();
-  writeJson(projectFile(id), project);
-  if (!fs.existsSync(path.join(HOME, "config.json"))) writeJson(path.join(HOME, "config.json"), { company: args.company || "우리 회사" });
-  console.log(`만들었습니다: ${projectFile(id)}`);
-  console.log(`- 체크리스트 ${project.checklist.length}개 (${from === "sample" ? "샘플" : "표준 킥오프"})${repo ? ` · GitHub ${repo}` : " · GitHub 저장소 없음 (--repo 또는 project.json의 github.repo)"}`);
-  const missingDates = Object.keys(dateArgs).filter((field) => !project.dates?.[field]);
-  if (missingDates.length) console.log(`- 아직 없는 날짜: ${missingDates.join(", ")} → project.json의 dates에 채우세요`);
-  console.log("- 다음: pm sync → pm build --open");
+  const { w, id } = target(args);
+  const project = w.load(id);
+  let features = [...(project.scope?.features || [])];
+  if (args.set !== undefined) features = list(args.set);
+  features.push(...list(args.add));
+  features = features.filter((key) => !list(args.remove).includes(key));
+  if (args.set !== undefined || args.add !== undefined || args.remove !== undefined) {
+    const diff = applyScope(project, features);
+    w.save(id, project);
+    if (diff.added.length) console.log(`추가: ${diff.added.join(", ")}`);
+    if (diff.disabled.length) console.log(`해당 없음으로: ${diff.disabled.join(", ")}`);
+    if (diff.enabled.length) console.log(`다시 필요: ${diff.enabled.join(", ")}`);
+    if (!diff.added.length && !diff.disabled.length && !diff.enabled.length) console.log("체크리스트 변화 없음");
+  }
+  const on = new Set(project.scope?.features || []);
+  console.log(`\n${project.name} 범위: ${lib.features.filter((f) => on.has(f.key)).map((f) => f.label).join(", ") || "(없음)"}`);
+  console.log("빠진 기능은 pm scope --add <key>, 목록은 pm scope --list");
 };
 
 commands.validate = (args) => {
-  const ids = args.all ? listProjectIds() : [resolveProjectId(args)];
+  const w = ws(args);
+  const ids = args.all ? w.ids() : [w.resolveId(args, gitRemoteRepo())];
   let problems = 0;
   for (const id of ids) {
-    const p = loadProject(id);
+    const p = w.load(id);
     const issues = [];
     if (p.id !== id) issues.push(`id가 폴더 이름(${id})과 다름: ${p.id}`);
     for (const [key, value] of Object.entries(p.dates || {})) if (value && !DATE_RE.test(value)) issues.push(`dates.${key} 형식: ${value}`);
@@ -259,61 +223,33 @@ commands.validate = (args) => {
       if (!Core.STATUS[item.status]) issues.push(`${where}: status '${item.status}' (가능: ${Object.keys(Core.STATUS).join(", ")})`);
       if (!BALLS.includes(item.ball)) issues.push(`${where}: ball '${item.ball}' (가능: ${BALLS.join(", ")})`);
       if (!catIds.has(item.cat)) issues.push(`${where}: categories에 없는 cat '${item.cat}'`);
-      for (const field of ["requested", "due", "updated", "blocksDate"]) if (item[field] && !DATE_RE.test(item[field])) issues.push(`${where}.${field} 형식: ${item[field]}`);
+      for (const field of ["requested", "due", "updated", "blocksDate", "answeredAt"]) if (item[field] && !DATE_RE.test(item[field])) issues.push(`${where}.${field} 형식: ${item[field]}`);
+      if (item.needBy && !Core.ANCHORS[item.needBy]) issues.push(`${where}.needBy '${item.needBy}' (가능: ${Object.keys(Core.ANCHORS).join(", ")})`);
       if (item.status === "requested" && !item.requested) issues.push(`${where}: 요청함인데 requested 날짜가 없음(대기 일수를 못 셈)`);
     }
+    for (const r of p.contract?.review || []) if (!Core.CONTRACT_REVIEW[r.status || "unchecked"]) issues.push(`contract.review.${r.id}: status '${r.status}'`);
     const text = JSON.stringify(p);
-    if (/sk-ant-|ghp_|github_pat_|xox[bp]-|AKIA[0-9A-Z]{16}/.test(text)) issues.push("비밀값처럼 보이는 문자열이 있음 — project.json에는 링크와 이름만 둔다");
+    if (/sk-ant-|ghp_|github_pat_|xox[bp]-|AKIA[0-9A-Z]{16}|(?:test|live)_(?:sk|ck|gsk)_/.test(text)) issues.push("비밀값처럼 보이는 문자열이 있음 — 링크·이름만 두고, 계정은 권한 초대로 받는다");
+    if (/비밀번호\s*[:=]\s*\S|password\s*[:=]\s*\S/i.test(text)) issues.push("비밀번호가 적힌 것 같음 — 지우고 권한 초대로 받는다");
     problems += issues.length;
     console.log(issues.length ? `✗ ${id}\n${issues.map((x) => `  - ${x}`).join("\n")}` : `✓ ${id}`);
   }
   if (problems) process.exitCode = 1;
 };
 
-commands.sync = async (args) => {
-  const ids = args.all ? listProjectIds().filter((id) => readJson(projectFile(id)).github?.repo) : [resolveProjectId(args)];
-  const token = githubToken();
-  for (const id of ids) {
-    const repo = loadProject(id).github?.repo;
-    if (!repo) throw new UsageError(`${id}: project.json에 github.repo가 없습니다`);
-    const list = async (apiPath) => {
-      const items = [];
-      let next = `https://api.github.com/repos/${repo}/${apiPath}${apiPath.includes("?") ? "&" : "?"}per_page=100`;
-      for (let page = 0; next && page < 50; page += 1) {
-        const response = await fetch(next, {
-          headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "pm-dashboard" },
-        });
-        if (!response.ok) throw new Error(`GitHub ${response.status} ${repo}/${apiPath}: ${(await response.text()).slice(0, 200)}`);
-        items.push(...(await response.json()));
-        next = response.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/)?.[1] ?? null;
-      }
-      return items;
-    };
-    const [milestones, issues] = await Promise.all([list("milestones?state=all"), list("issues?state=all")]);
-    // 키를 짧게 줄여 파일 크기를 줄인다. forecast.js의 normalizeIssues가 풀어서 쓴다
-    const snapshot = {
-      repo,
-      syncedAt: new Date().toISOString(),
-      milestones: milestones.map((m) => ({ number: m.number, title: m.title, state: m.state, due: m.due_on ? m.due_on.slice(0, 10) : null, open: m.open_issues, closed: m.closed_issues })),
-      issues: issues
-        .filter((i) => !i.pull_request)
-        .map((i) => ({ n: i.number, t: i.title, s: i.state, r: i.state_reason ?? null, c: i.created_at, x: i.closed_at, m: i.milestone?.number ?? null, l: i.labels.map((l) => l.name), a: i.assignees.map((a) => a.login) })),
-    };
-    fs.mkdirSync(projectDir(id), { recursive: true });
-    fs.writeFileSync(githubFile(id), JSON.stringify(snapshot));
-    console.log(`${id} · ${repo} · 이슈 ${snapshot.issues.length} · 마일스톤 ${snapshot.milestones.length}`);
-  }
-};
+// ---------------------------------------------------------------- 현황
 
 function statusSummary(m) {
-  const { project, forecast, readiness, waiting, missing, health } = m;
+  const { project, forecast, readiness, waiting, missing, health, kickoff: ko, sheet: sh, contract } = m;
   const p = forecast?.project;
   const launch = project.dates?.launch;
   return {
-    project: { id: project.id, name: project.name, client: project.client, dates: project.dates, dataAsOf: project.asOf || null },
+    project: { id: project.id, name: project.name, client: project.client, dates: project.dates, scope: project.scope?.features || [], dataAsOf: project.asOf || null },
     health: { label: health.label, reasons: health.reasons },
     launch: launch ? { date: launch, daysLeft: F.daysBetween(m.today, launch) } : null,
     briefing: Core.briefing(m).map((item) => item.text),
+    kickoff: ko.active ? { completed: ko.completed, stages: ko.stages.map((s) => ({ name: s.name, done: s.done, total: s.total, complete: s.complete })), current: ko.current?.name || null } : null,
+    thisWeek: m.thisWeek.map((a) => ({ type: a.type, item: a.item || null, late: a.late, text: a.text })),
     forecast: p
       ? {
           snapshot: forecast.syncedAt,
@@ -333,16 +269,25 @@ function statusSummary(m) {
       : null,
     lateMilestones: forecast ? forecast.views.filter((v) => v.isLate).map((v) => ({ title: v.title, open: v.open, due: v.due })) : [],
     readiness,
-    missing: missing.map((i) => ({ id: i.id, title: i.title, ball: i.ball, blocks: i.blocks || null })),
+    requestSheet: sh.stats,
+    missing: missing.map((i) => ({ id: i.id, title: i.title, ball: i.ball, askBy: i.askBy, blocks: i.blocks || null })),
     waitingOnClient: waiting.map((i) => ({ id: i.id, title: i.title, waitDays: i.waitDays, overdue: i.overdue, blocks: i.blocks || null })),
+    contract: contract ? { review: contract.review, nextPayment: contract.next ? { name: contract.next.name, trigger: contract.next.trigger, due: contract.next.dueDate } : null } : null,
     decisions: project.decisions || [],
     risks: project.risks || [],
     approvalQueue: (project.queue || []).map((q) => ({ id: q.id, title: q.title })),
   };
 }
 
+function printWeek(m) {
+  if (!m.thisWeek.length) return console.log("이번 주 할 일  없음");
+  console.log("이번 주 할 일");
+  for (const a of m.thisWeek.slice(0, 10)) console.log(`  ${a.late ? "! " : "- "}${a.text}`);
+}
+
 commands.status = (args) => {
-  const m = buildModel(resolveProjectId(args));
+  const { w, id } = target(args);
+  const m = buildModel(w, id);
   const s = statusSummary(m);
   if (args.json) return console.log(JSON.stringify(s, null, 2));
   console.log(`${s.project.name} (${s.project.client || "-"}) · ${s.health.label}${s.launch ? ` · 출시 ${F.monthDay(s.launch.date)} D-${s.launch.daysLeft}` : ""}`);
@@ -350,18 +295,53 @@ commands.status = (args) => {
   console.log("");
   s.briefing.forEach((line, i) => console.log(`${i + 1}. ${line}`));
   console.log("");
+  if (s.kickoff) console.log(`킥오프  ${s.kickoff.stages.map((st) => `${st.complete ? "✓" : st.name === s.kickoff.current ? "▶" : "·"} ${st.name} ${st.done}/${st.total}`).join("  ")}`);
   if (s.forecast) {
     const f = s.forecast;
-    console.log(`예측  남은 ${f.remaining} · 처리 ${fmt(f.velocityPerWeek)}/주 · 유입 ${fmt(f.inflowPerWeek)}/주 · 새 이슈가 멈추면 ${F.shortDate(f.expected)} (${F.monthDay(f.optimistic)}~${F.monthDay(f.pessimistic)})`);
-    console.log(`      지금 추세면 ${F.monthDay(f.target)}에 ~${f.remainingAtTarget}건 남음 · 맞추려면 주 ${f.requiredVelocityPerWeek}건 · GitHub ${syncAge(f.snapshot)} 스냅샷`);
-  } else console.log("예측  GitHub 스냅샷 없음 (pm sync)");
-  console.log(`준비  ${s.readiness.ready}/${s.readiness.total} 확정 (${s.readiness.percent}%) · 없음 ${s.missing.length} · 고객사 대기 ${s.waitingOnClient.length}${s.waitingOnClient[0] ? ` (최장 D+${s.waitingOnClient[0].waitDays} ${s.waitingOnClient[0].title})` : ""}`);
+    console.log(`예측    남은 ${f.remaining} · 처리 ${fmt(f.velocityPerWeek)}/주 · 유입 ${fmt(f.inflowPerWeek)}/주 · 새 이슈가 멈추면 ${F.shortDate(f.expected)} (${F.monthDay(f.optimistic)}~${F.monthDay(f.pessimistic)})`);
+    console.log(`        지금 추세면 ${F.monthDay(f.target)}에 ~${f.remainingAtTarget}건 남음 · 맞추려면 주 ${f.requiredVelocityPerWeek}건 · GitHub ${syncAge(f.snapshot)} 스냅샷`);
+  } else console.log(`예측    ${m.project.github ? "GitHub 스냅샷 없음 (pm sync)" : "GitHub 저장소 연결 전"}`);
+  console.log(`준비    ${s.readiness.ready}/${s.readiness.total} 확정 (${s.readiness.percent}%) · 요청 목록 ${s.requestSheet.sent}/${s.requestSheet.total} 보냄, 답 ${s.requestSheet.answered} · 고객사 대기 ${s.waitingOnClient.length}${s.waitingOnClient[0] ? ` (최장 D+${s.waitingOnClient[0].waitDays} ${s.waitingOnClient[0].title})` : ""}`);
+  if (s.contract) console.log(`계약    점검 있음 ${s.contract.review.ok}/${s.contract.review.total} · 불리·모호 ${s.contract.review.risk} · 없음 ${s.contract.review.missing} · 확인 전 ${s.contract.review.unchecked}${s.contract.nextPayment ? ` · 다음 대금 ${s.contract.nextPayment.name}(${s.contract.nextPayment.trigger})` : ""}`);
   if (s.approvalQueue.length) console.log(`승인 대기열 ${s.approvalQueue.length}건`);
+  console.log("");
+  printWeek(m);
+};
+
+commands.kickoff = (args) => {
+  const { w, id } = target(args);
+  const m = buildModel(w, id);
+  if (args.json) {
+    const s = statusSummary(m);
+    return console.log(JSON.stringify({ kickoff: s.kickoff, thisWeek: s.thisWeek }, null, 2));
+  }
+  console.log(`${m.project.name} 킥오프 ${m.kickoff.completed}/${m.kickoff.stages.length}단계`);
+  for (const [n, st] of m.kickoff.stages.entries()) {
+    console.log(`\n${n + 1}. ${st.name} ${st.complete ? "✓ 끝" : `${st.done}/${st.total}`} — ${st.hint}`);
+    for (const item of st.remaining.slice(0, 8)) console.log(`   · ${item.title} (${Core.STATUS[item.status].label}${item.askBy && item.status === "missing" ? `, ${F.monthDay(item.askBy)}까지 요청` : ""})`);
+    if (st.remaining.length > 8) console.log(`   · 외 ${st.remaining.length - 8}개`);
+    if (st.contractReview && m.contract && !m.contract.reviewDone) console.log(`   · 계약 점검 ${m.contract.review.unchecked}개 확인 전 (pm contract)`);
+  }
+  console.log("");
+  printWeek(m);
+};
+
+commands.sync = async (args) => {
+  const w = ws(args);
+  const ids = args.all ? w.ids().filter((id) => w.load(id).github?.repo) : [w.resolveId(args, gitRemoteRepo())];
+  for (const id of ids) {
+    const repo = w.load(id).github?.repo;
+    if (!repo) throw new UsageError(`${id}: project.json에 github.repo가 없습니다`);
+    fs.mkdirSync(w.projectDir(id), { recursive: true });
+    const snapshot = await sync(repo, w.githubFile(id));
+    console.log(`${id} · ${repo} · 이슈 ${snapshot.issues.length} · 마일스톤 ${snapshot.milestones.length}`);
+  }
 };
 
 commands.forecast = (args) => {
   const scenario = { velocityPct: Number(args.velocity) || 0, inflowPct: Number(args.inflow) || 0, descope: Math.max(0, Number(args.descope) || 0) };
-  const m = buildModel(resolveProjectId(args), scenario);
+  const { w, id } = target(args);
+  const m = buildModel(w, id, scenario);
   const p = m.forecast?.project;
   if (!p) throw new UsageError("GitHub 스냅샷이 없거나 예측할 이슈가 없습니다. pm sync를 먼저 하세요.");
   const result = { scenario, ...statusSummary(m).forecast };
@@ -370,38 +350,128 @@ commands.forecast = (args) => {
   console.log(`${p.targetLabel} ${F.shortDate(p.target)}: ${result.status} · 새 이슈가 멈추면 ${F.shortDate(p.expected)} · 지금 추세면 ~${p.remainingAtTarget}건 남음 · 유입까지 감안한 완료 ${p.netFinish ? F.shortDate(p.netFinish) : "계산 불가(유입 > 처리)"}`);
 };
 
+commands["setup-repo"] = async (args) => {
+  const { w, id } = target(args);
+  const project = w.load(id);
+  const repo = project.github?.repo;
+  if (!repo) throw new UsageError("project.json에 github.repo가 없습니다");
+  const plan = await setupRepo(repo, Core.anchorDates(project.dates), { apply: !!args.apply });
+  console.log(`${repo} — 이미 있는 라벨 ${plan.existing.labels}개, 마일스톤 ${plan.existing.milestones}개`);
+  console.log(plan.labels.length ? `${args.apply ? "만든" : "만들"} 라벨: ${plan.labels.map((l) => l.name).join(", ")}` : "라벨: 모두 있음");
+  if (plan.milestones.length) {
+    console.log(`${args.apply ? "만든" : "만들"} 마일스톤:`);
+    for (const m of plan.milestones) console.log(`  ${m.title} (마감 ${F.shortDate(m.due)})`);
+  } else console.log("마일스톤: 모두 있음");
+  if (!args.apply) {
+    if (!project.dates?.devStart) console.log("개발 시작·마감 날짜가 없어 스프린트를 계획하지 못했습니다.");
+    console.log("\n아직 아무것도 만들지 않았습니다. 확인 뒤 --apply를 붙이면 만듭니다.");
+    return;
+  }
+  const labels = project.checklist.find((i) => i.id === "labels");
+  if (labels && labels.status !== "confirmed") {
+    labels.status = "confirmed";
+    labels.updated = today();
+    labels.history = [...(labels.history || []), { date: today(), text: "pm setup-repo로 라벨·스프린트 마일스톤 생성" }];
+  }
+  project.clientLabels = [...new Set([...(project.clientLabels || []), "확인요청"])];
+  w.save(id, project);
+};
+
+// ---------------------------------------------------------------- 문서
+
+function emit(args, w, id, name, text) {
+  if (args.save) console.error(`저장: ${w.saveDoc(id, `${name}-${today()}.md`, text)}`);
+  if (typeof args.out === "string") {
+    fs.writeFileSync(path.resolve(args.out), text);
+    console.error(`저장: ${path.resolve(args.out)}`);
+  }
+  console.log(text);
+}
+
+commands.sheet = (args) => {
+  const { w, id } = target(args);
+  if (args["mark-sent"]) {
+    const project = w.load(id);
+    const date = args.date ? parseDate(args.date, "date") : today();
+    const sent = markSent(project, date);
+    w.save(id, project);
+    return console.log(sent.length ? `요청함으로 바꿨습니다 (${F.shortDate(date)}): ${sent.length}건` : "아직 안 보낸 항목이 없습니다");
+  }
+  const m = buildModel(w, id);
+  const format = args.format === "notion" ? "notion" : "md";
+  emit(args, w, id, format === "notion" ? "requests-notion" : "requests", Docs.sheetDocument(m, { format, onlyPending: !!args["only-new"], company: w.config.company }));
+  const s = m.sheet.stats;
+  console.error(`\n요청 목록 ${s.total}개 · 보냄 ${s.sent} · 답 ${s.answered} · 이번에 보낼 것 ${m.sheet.pending.length} · ⭐ ${s.priority}`);
+  if (m.sheet.pending.length) console.error("보낸 뒤에는: pm sheet --mark-sent");
+};
+
+commands.answer = (args) => {
+  const { w, id } = target(args);
+  const [itemId, ...pairs] = args._;
+  const project = w.load(id);
+  const item = project.checklist.find((i) => i.id === itemId);
+  if (!item) throw new UsageError(`체크리스트에 ${itemId}가 없습니다`);
+  const done = [];
+  for (const pair of pairs) {
+    const at = pair.indexOf("=");
+    if (at < 1) throw new UsageError(`"라벨=값" 형식이 아닙니다: ${pair}`);
+    const label = pair.slice(0, at).trim();
+    const value = pair.slice(at + 1).trim();
+    const field = (item.fields || []).find((f) => f.label === label) || (item.fields || []).find((f) => f.label.startsWith(label) || f.label.includes(label));
+    if (!field) throw new UsageError(`${itemId}에 '${label}' 칸이 없습니다. 있는 칸: ${(item.fields || []).map((f) => f.label).join(", ")}`);
+    if (/비밀번호|password/i.test(field.label + value)) throw new UsageError("비밀번호는 기록하지 않습니다. 권한 초대로 받으세요");
+    field.answer = value;
+    done.push(field.label);
+  }
+  if (typeof args.note === "string") item.answer = args.note;
+  item.answeredAt = today();
+  item.updated = today();
+  const before = item.status;
+  item.status = args.confirm ? "confirmed" : "received";
+  if (!args.confirm) item.ball = "us";
+  item.history = [...(item.history || []), { date: today(), text: `고객사 답 기록${done.length ? `: ${done.join(", ")}` : ""} · ${Core.STATUS[before].label} → ${Core.STATUS[item.status].label}` }];
+  w.save(id, project);
+  console.log(`${itemId}: ${done.length ? `${done.join(", ")} 기록` : "답 기록"} · ${Core.STATUS[item.status].label}`);
+};
+
+commands.report = (args) => {
+  const { w, id } = target(args);
+  emit(args, w, id, args.client ? "report-client" : "report", Docs.weeklyReport(buildModel(w, id), { client: !!args.client }));
+};
+
+commands["kickoff-kit"] = (args) => {
+  const { w, id } = target(args);
+  const text = Docs.kickoffKit(buildModel(w, id), { internal: !!args.internal, company: w.config.company, features: library().features });
+  emit(args, w, id, args.internal ? "kickoff-internal" : "kickoff", text);
+};
+
+// ---------------------------------------------------------------- 체크리스트
+
 commands.list = (args) => {
-  const m = buildModel(resolveProjectId(args));
-  const company = config().company;
-  const ballLabel = Core.labels(company).BALL;
-  const items = m.checklist.filter(
-    (i) => (!args.status || i.status === args.status) && (!args.ball || i.ball === args.ball) && (!args.cat || i.cat === args.cat),
-  );
+  const { w, id } = target(args);
+  const m = buildModel(w, id);
+  const ballLabel = Core.labels(w.config.company).BALL;
+  const items = m.checklist.filter((i) => (!args.status || i.status === args.status) && (!args.ball || i.ball === args.ball) && (!args.cat || i.cat === args.cat));
   if (args.json) return console.log(JSON.stringify(items, null, 2));
   for (const cat of m.project.categories) {
-    const rows = items.filter((i) => i.cat === cat.id).sort((a, b) => Core.STATUS[a.status].order - Core.STATUS[b.status].order);
+    const rows = items.filter((i) => i.cat === cat.id).sort((a, b) => Core.STATUS[a.status].order - Core.STATUS[b.status].order || (a.askBy || "9999").localeCompare(b.askBy || "9999"));
     if (!rows.length) continue;
     console.log(`\n${cat.name}`);
     for (const i of rows)
       console.log(
-        `  ${pad(i.id, 20)}${pad(Core.STATUS[i.status].label, 10)}${pad(ballLabel[i.ball] || i.ball, 10)}${pad(i.waitDays != null ? `D+${i.waitDays}` : i.due ? `~${F.monthDay(i.due)}` : "", 8)}${i.title}${i.blocks ? ` → ${i.blocks}` : ""}`,
+        `  ${pad(i.id, 18)}${pad(Core.STATUS[i.status].label, 10)}${pad(ballLabel[i.ball] || i.ball, 10)}${pad(i.waitDays != null ? `D+${i.waitDays}` : i.askBy && i.status === "missing" ? `${i.late ? "!" : ""}~${F.monthDay(i.askBy)}` : "", 9)}${i.title}${i.blocks ? ` → ${i.blocks}${i.blocksDate ? ` ${F.monthDay(i.blocksDate)}` : ""}` : ""}`,
       );
   }
 };
 
 commands.set = (args) => {
-  const id = resolveProjectId(args);
+  const { w, id } = target(args);
   const [itemId] = args._;
   if (!itemId) throw new UsageError("pm set <item> --status ...");
-  const project = loadProject(id);
+  const project = w.load(id);
   const item = project.checklist.find((i) => i.id === itemId);
   if (!item) throw new UsageError(`체크리스트에 ${itemId}가 없습니다. pm list로 확인하세요.`);
   const before = { status: item.status, ball: item.ball };
-  const date = (value, flag) => {
-    const v = value === "today" ? today() : value;
-    if (!DATE_RE.test(v)) throw new UsageError(`--${flag}는 YYYY-MM-DD 또는 today`);
-    return v;
-  };
   if (args.status) {
     if (!Core.STATUS[args.status]) throw new UsageError(`--status: ${Object.keys(Core.STATUS).join(", ")}`);
     item.status = args.status;
@@ -411,8 +481,8 @@ commands.set = (args) => {
     if (!BALLS.includes(args.ball)) throw new UsageError(`--ball: ${BALLS.join(", ")}`);
     item.ball = args.ball;
   }
-  if (args.requested) item.requested = date(args.requested, "requested");
-  if (args.due) item.due = date(args.due, "due");
+  if (args.requested) item.requested = parseDate(args.requested, "requested");
+  if (args.due) item.due = parseDate(args.due, "due");
   if (args["res-label"] || args["res-url"]) item.res = { label: args["res-label"] || item.res?.label || args["res-url"], url: args["res-url"] || item.res?.url || "" };
   for (const field of ["note", "need", "proposal"]) if (typeof args[field] === "string") item[field] = args[field];
   item.updated = today();
@@ -421,211 +491,96 @@ commands.set = (args) => {
   if (before.ball !== item.ball) changes.push(`공 ${before.ball} → ${item.ball}`);
   if (typeof args.log === "string") changes.push(args.log);
   if (changes.length) item.history = [...(item.history || []), { date: today(), text: changes.join(" · ") }];
-  writeJson(projectFile(id), project);
+  w.save(id, project);
   console.log(`${id}/${itemId}: ${changes.join(" · ") || "갱신"}`);
 };
 
 commands.request = (args) => {
-  const id = resolveProjectId(args);
+  const { w, id } = target(args);
   const [itemId] = args._;
-  const m = buildModel(id);
+  const m = buildModel(w, id);
   const item = m.checklist.find((i) => i.id === itemId);
   if (!item) throw new UsageError(`체크리스트에 ${itemId}가 없습니다.`);
-  const company = config().company;
+  const company = w.config.company;
   const { RECEIVE, MODES } = Core.labels(company);
   const receive = RECEIVE[args.receive] ? args.receive : item.receiveAt || m.project.receiveDefault;
   const mode = MODES[args.mode] ? args.mode : item.mode || "ask";
-  const due = typeof args.due === "string" ? args.due : item.due || F.addDays(today(), 5);
+  const due = typeof args.due === "string" ? parseDate(args.due, "due") : item.due || item.askBy || F.addDays(today(), 5);
   const reminder = item.status === "requested";
   const text = reminder ? Core.reminderText(m.project, item) : Core.requestText(m.project, item, { receive, mode, due }, company);
   console.log(text);
   if (args.queue) {
-    const project = loadProject(id);
-    const entry = {
-      id: `q-${Date.now().toString(36)}`,
-      createdAt: new Date().toISOString(),
-      projectId: id,
-      kind: reminder ? "reminder" : "request",
-      itemId,
-      title: `${item.title} ${reminder ? "리마인드" : "요청"}`,
-      to: `${m.project.client} 담당자`,
-      channel: RECEIVE[receive].label,
-      receive,
-      mode,
-      due,
-      text,
-      by: "claude",
-    };
+    const project = w.load(id);
+    const entry = { id: `q-${Date.now().toString(36)}`, createdAt: new Date().toISOString(), projectId: id, kind: reminder ? "reminder" : "request", itemId, title: `${item.title} ${reminder ? "리마인드" : "요청"}`, to: `${m.project.client} 담당자`, channel: RECEIVE[receive].label, receive, mode, due, text, by: "claude" };
     project.queue = [...(project.queue || []), entry];
-    writeJson(projectFile(id), project);
+    w.save(id, project);
     console.error(`\n승인 대기열에 넣었습니다 (${entry.id}). 보내지는 않았습니다.`);
   }
 };
 
-// ---------------------------------------------------------------- 대시보드 만들기
+// ---------------------------------------------------------------- 계약
 
-// <script> 안에 넣는 JSON. </script>나 줄 구분 문자가 스크립트를 끊지 않게 바꾼다
-const LINE_SEPARATORS = new RegExp(`[${String.fromCharCode(0x2028)}${String.fromCharCode(0x2029)}]`, "g");
-const scriptJson = (value) =>
-  JSON.stringify(value)
-    .replace(/</g, "\\u003c")
-    .replace(LINE_SEPARATORS, (ch) => `\\u${ch.charCodeAt(0).toString(16)}`);
-
-function dashboardHtml({ ids, server = false, client = false }) {
-  const projects = {};
-  const github = {};
-  for (const id of ids) {
-    const project = Core.normalize(loadProject(id), today());
-    projects[id] = client ? Core.clientSafe(project) : project;
-    if (project.github && fs.existsSync(githubFile(id))) {
-      const snapshot = readJson(githubFile(id));
-      // 공유본에는 이슈 제목을 넣지 않는다(마일스톤 진행률만)
-      github[id] = client ? { ...snapshot, issues: [] } : snapshot;
-    }
+commands.contract = (args) => {
+  const { w, id } = target(args);
+  const project = w.load(id);
+  if (!project.contract) project.contract = { signedAt: null, review: [], payments: [] };
+  const [sub, key] = args._;
+  if (sub === "check") {
+    const row = project.contract.review.find((r) => r.id === key);
+    if (!row) throw new UsageError(`계약 점검 항목 ${key}가 없습니다: ${project.contract.review.map((r) => r.id).join(", ")}`);
+    if (!Core.CONTRACT_REVIEW[args.status]) throw new UsageError("--status: ok, risk, missing, na");
+    row.status = args.status;
+    if (typeof args.note === "string") row.note = args.note;
+    w.save(id, project);
+    return console.log(`${row.title}: ${Core.CONTRACT_REVIEW[row.status].label}${row.note ? ` — ${row.note}` : ""}`);
   }
-  const mode = { server, client, company: config().company, builtAt: new Date().toISOString() };
-  const scripts = [
-    `<script>window.PM_MODE=${scriptJson(mode)};window.PM_PROJECTS=${scriptJson(projects)};window.PM_GITHUB=${scriptJson(github)};</script>`,
-    ...["forecast.js", "core.js", "app.js", "agent.js"].map((file) => `<script>\n${fs.readFileSync(path.join(APP_DIR, "js", file), "utf8")}\n</script>`),
-  ].join("\n");
-  // replace의 두 번째 인자에 문자열을 주면 $& 같은 패턴이 해석되므로 함수로 넘긴다
-  return fs.readFileSync(path.join(APP_DIR, "index.html"), "utf8").replace("<!-- PM:SCRIPTS -->", () => scripts);
-}
+  if (sub === "pay") {
+    const payment = project.contract.payments.find((p) => p.name === key);
+    if (!payment) throw new UsageError(`대금 단계 ${key}가 없습니다: ${project.contract.payments.map((p) => p.name).join(", ")}`);
+    if (!Core.PAYMENT_STATUS[args.status]) throw new UsageError("--status: planned, invoiced, paid");
+    payment.status = args.status;
+    if (args.status === "paid") payment.paidAt = args.date ? parseDate(args.date, "date") : today();
+    w.save(id, project);
+    return console.log(`${payment.name}: ${Core.PAYMENT_STATUS[payment.status]}`);
+  }
+  if (sub === "signed") {
+    project.contract.signedAt = parseDate(args.date || "today", "date");
+    const contract = project.checklist.find((i) => i.id === "contract");
+    if (contract && contract.status !== "confirmed") {
+      contract.status = "confirmed";
+      contract.updated = today();
+      contract.history = [...(contract.history || []), { date: today(), text: `계약 체결 ${project.contract.signedAt}` }];
+    }
+    w.save(id, project);
+    return console.log(`계약 체결일 ${project.contract.signedAt}`);
+  }
+  const c = Core.contractSummary(Core.normalize(project), today());
+  if (args.json) return console.log(JSON.stringify({ ...c, reviewItems: project.contract.review }, null, 2));
+  console.log(`${project.name} 계약 ${c.signed ? `체결 ${c.signedAt}` : "체결 전"} · 점검 있음 ${c.review.ok}/${c.review.total} · 불리·모호 ${c.review.risk} · 없음 ${c.review.missing} · 확인 전 ${c.review.unchecked}`);
+  console.log("\n점검 (pm contract check <id> --status ok|risk|missing|na --note ...)");
+  for (const r of project.contract.review) console.log(`  ${pad(r.id, 20)}${pad(Core.CONTRACT_REVIEW[r.status || "unchecked"].label, 10)}${r.title}${r.note ? ` — ${r.note}` : ""}`);
+  console.log("\n대금 (pm contract pay <이름> --status invoiced|paid)");
+  for (const p of c.payments) console.log(`  ${pad(p.name, 8)}${pad(p.ratio ? `${p.ratio}%` : "", 6)}${pad(Core.PAYMENT_STATUS[p.status], 8)}${p.trigger}${p.dueDate ? ` · ${F.shortDate(p.dueDate)} 예정` : ""}${p.paidAt ? ` · ${p.paidAt} 받음` : ""}`);
+};
+
+// ---------------------------------------------------------------- 대시보드
 
 commands.build = (args) => {
+  const w = ws(args);
   const client = !!args.client;
-  let ids;
-  if (typeof args.project === "string" || client) ids = [resolveProjectId(args)];
-  else ids = listProjectIds();
+  const ids = typeof args.project === "string" || client ? [w.resolveId(args, gitRemoteRepo())] : w.ids();
   if (!ids.length) throw new UsageError("등록된 프로젝트가 없습니다. pm init <id>로 만드세요.");
   const out =
     typeof args.out === "string"
       ? path.resolve(args.out)
-      : path.join(HOME, "build", client ? `${ids[0]}-client-${today()}.html` : ids.length === 1 ? `${ids[0]}.html` : "dashboard.html");
+      : path.join(w.dir, "build", client ? `${ids[0]}-client-${today()}.html` : ids.length === 1 ? `${ids[0]}.html` : "dashboard.html");
   fs.mkdirSync(path.dirname(out), { recursive: true });
-  fs.writeFileSync(out, dashboardHtml({ ids, client }));
-  console.log(`${out}${client ? " (고객사 공유본: 내부 메모·결정·위험·이슈 제목·승인 대기열 제외)" : ""}`);
+  fs.writeFileSync(out, dashboardHtml(w, { ids, client }));
+  console.log(`${out}${client ? " (고객사 공유본: 요청 목록·일정·진행률만, 내부 메모·계약·결정·위험·이슈 제목 제외)" : ""}`);
   if (args.open) openFile(out);
 };
 
-// ---------------------------------------------------------------- 로컬 서버
-
-const ITEM_FIELDS = ["status", "ball", "res", "requested", "due", "updated", "receiveAt", "mode", "note"];
-
-function readBody(req, limit = 5_000_000) {
-  return new Promise((resolve, reject) => {
-    let size = 0;
-    const chunks = [];
-    req.on("data", (chunk) => {
-      size += chunk.length;
-      if (size > limit) {
-        reject(new Error("too large"));
-        req.destroy();
-      } else chunks.push(chunk);
-    });
-    req.on("end", () => {
-      try {
-        resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {});
-      } catch (error) {
-        reject(error);
-      }
-    });
-    req.on("error", reject);
-  });
-}
-
-commands.serve = (args) => {
-  const port = Number(args.port) || 4477;
-  const host = "127.0.0.1";
-  const origins = new Set([`http://${host}:${port}`, `http://localhost:${port}`]);
-  const send = (res, status, body, type = "application/json; charset=utf-8") => {
-    res.writeHead(status, { "content-type": type, "cache-control": "no-store" });
-    res.end(typeof body === "string" ? body : JSON.stringify(body));
-  };
-
-  const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url, `http://${host}:${port}`);
-    try {
-      if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
-        return send(res, 200, dashboardHtml({ ids: listProjectIds(), server: true }), "text/html; charset=utf-8");
-      }
-      if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { claude: !!process.env.ANTHROPIC_API_KEY, company: config().company });
-
-      // 다른 사이트가 이 로컬 서버에 쓰지 못하게, 같은 출처의 JSON 요청만 받는다
-      if (req.method !== "GET") {
-        const origin = req.headers.origin;
-        if (origin && !origins.has(origin)) return send(res, 403, { error: "origin" });
-        if (req.method !== "DELETE" && !String(req.headers["content-type"] || "").startsWith("application/json")) return send(res, 415, { error: "json only" });
-      }
-
-      if (req.method === "POST" && url.pathname === "/api/claude") {
-        const key = process.env.ANTHROPIC_API_KEY;
-        if (!key) return send(res, 503, { error: { message: "pm serve에 ANTHROPIC_API_KEY가 없습니다" } });
-        const body = await readBody(req);
-        const upstream = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-api-key": key,
-            "anthropic-version": "2023-06-01",
-            "anthropic-beta": "server-side-fallback-2026-07-01",
-          },
-          body: JSON.stringify(body),
-        });
-        return send(res, upstream.status, await upstream.text());
-      }
-
-      const match = url.pathname.match(/^\/api\/projects\/([a-z0-9-]+)\/(items|resources|queue)(?:\/([^/]+))?$/);
-      if (!match) return send(res, 404, { error: "not found" });
-      const [, id, kind, rawSub] = match;
-      const sub = rawSub ? decodeURIComponent(rawSub) : null;
-      const project = loadProject(id);
-
-      if (kind === "items" && req.method === "POST" && sub) {
-        const { patch = {}, logText } = await readBody(req);
-        const item = project.checklist.find((i) => i.id === sub);
-        if (!item) return send(res, 404, { error: "item" });
-        for (const field of ITEM_FIELDS) if (field in patch) item[field] = patch[field];
-        if (item.status && !Core.STATUS[item.status]) return send(res, 400, { error: "status" });
-        if (item.ball && !BALLS.includes(item.ball)) return send(res, 400, { error: "ball" });
-        if (logText) item.history = [...(item.history || []), { date: today(), text: String(logText).slice(0, 500) }];
-        writeJson(projectFile(id), project);
-        return send(res, 200, { ok: true, item });
-      }
-      if (kind === "resources" && req.method === "POST" && sub) {
-        const { url: link = "" } = await readBody(req);
-        const resource = (project.resources || []).find((r) => r.id === sub);
-        if (!resource) return send(res, 404, { error: "resource" });
-        resource.url = /^https?:\/\//.test(link) ? link : "";
-        writeJson(projectFile(id), project);
-        return send(res, 200, { ok: true });
-      }
-      if (kind === "queue" && req.method === "POST" && !sub) {
-        const { entry } = await readBody(req);
-        if (!entry?.id || typeof entry.text !== "string") return send(res, 400, { error: "entry" });
-        project.queue = [...(project.queue || []).filter((q) => q.id !== entry.id), entry];
-        writeJson(projectFile(id), project);
-        return send(res, 200, { ok: true });
-      }
-      if (kind === "queue" && req.method === "DELETE" && sub) {
-        project.queue = (project.queue || []).filter((q) => q.id !== sub);
-        writeJson(projectFile(id), project);
-        return send(res, 200, { ok: true });
-      }
-      return send(res, 405, { error: "method" });
-    } catch (error) {
-      return send(res, error instanceof UsageError ? 404 : 500, { error: error.message });
-    }
-  });
-
-  server.listen(port, host, () => {
-    const address = `http://${host}:${port}/`;
-    console.log(`PM 대시보드 ${address} (끄려면 Ctrl+C)`);
-    console.log(`데이터 ${PROJECTS_DIR} · 프로젝트 ${listProjectIds().join(", ") || "없음"}`);
-    console.log(`리미 Claude 모드: ${process.env.ANTHROPIC_API_KEY ? "서버 키 사용" : "ANTHROPIC_API_KEY 없음 → 화면에서 키를 넣거나 내장 모드"}`);
-    if (args.open) openFile(address);
-  });
-};
+commands.serve = (args) => serve(ws(args), { port: Number(args.port) || 4477, open: !!args.open });
 
 // ---------------------------------------------------------------- 실행
 

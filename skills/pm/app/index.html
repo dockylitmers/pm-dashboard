@@ -39,6 +39,8 @@
     --crit-wash: #fdeaea;
     --violet: #6b4fd8;
     --violet-wash: #efebfd;
+    --pink-wash: #fde2ec;
+    --yellow-wash: #fff0b3;
     --shadow-1: 0 1px 2px rgba(20, 20, 10, 0.05);
     --shadow-2: 0 8px 28px rgba(20, 20, 10, 0.12);
     --radius: 12px;
@@ -75,6 +77,8 @@
       --crit-wash: #2d1414;
       --violet: #9085e9;
       --violet-wash: #221d3d;
+      --pink-wash: #43202f;
+      --yellow-wash: #3d3412;
       --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
       --shadow-2: 0 10px 30px rgba(0, 0, 0, 0.55);
     }
@@ -108,6 +112,8 @@
     --crit-wash: #2d1414;
     --violet: #9085e9;
     --violet-wash: #221d3d;
+    --pink-wash: #43202f;
+    --yellow-wash: #3d3412;
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-2: 0 10px 30px rgba(0, 0, 0, 0.55);
   }
@@ -531,11 +537,35 @@
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; z-index: 90; opacity: 0; transition: all 0.2s; pointer-events: none; max-width: calc(100vw - 32px); }
   .toast.show { opacity: 1; transform: translateX(-50%); }
 
+  /* 킥오프 단계 */
+  .stepper { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .step-item { display: flex; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+  .step-item.now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .step-no { width: 24px; height: 24px; border-radius: 50%; background: var(--ink-3); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
+  .step-no svg.icon { width: 14px; height: 14px; vertical-align: 0; }
+  .step-item.now .step-no { background: var(--accent); }
+  .step-item.done .step-no { background: var(--good); }
+  .step-hint { font-size: 12px; color: var(--ink-3); margin: 2px 0 6px; }
+
+  /* 고객사 확인 요청 목록: 분홍=우리 제안값, 노랑=고객사 답 (Notion 요청 페이지와 같은 약속) */
+  .prop { background: var(--pink-wash); border-radius: 4px; padding: 0 4px; }
+  .ans { background: var(--yellow-wash); border-radius: 4px; padding: 0 4px; font-weight: 600; }
+  .info-line { font-size: 12.5px; line-height: 1.75; }
+  .info-line .lbl { color: var(--ink-2); }
+  .info-line .lbl::after { content: ":"; }
+  .legend-row { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); align-items: center; }
+  .sheet-table { min-width: 880px; }
+  .sheet-table td { vertical-align: top; }
+  .sheet-table tbody tr[data-answer] { cursor: pointer; }
+  .col-cat { width: 120px; } .col-item { width: 190px; } .col-why { width: 220px; } .col-note { width: 170px; }
+  .doc-pre { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.6; background: var(--surface-sunk); padding: 12px; border-radius: 8px; max-height: 64vh; overflow: auto; margin: 0; }
+
   /* 고객사 공유 보기: 내부 정보 숨김 */
   body.client-view [data-internal], body.client-view .chat.open { display: none; }
   .client-banner { display: none; }
   body.client-view .client-banner { display: flex; }
   body.client-only #client-view-btn, body.client-only .client-banner { display: none; }
+  body.no-projects .project-switch, body.no-projects #dday, body.no-projects #health-chip, body.no-projects #queue-btn, body.no-projects #client-view-btn, body.no-projects .limi-fab, body.no-projects .nav-btn, body.no-projects .nav-label { display: none; }
   body.client-view .client-span { grid-column: span 6; }
 
   /* ---------- 반응형 ---------- */
@@ -548,6 +578,7 @@
     .res-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 860px) {
+    .stepper { grid-template-columns: 1fr 1fr; }
     .app { grid-template-columns: 1fr; }
     .sidebar { position: static; height: auto; flex-direction: row; overflow-x: auto; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--line); gap: 2px; }
     .brand { padding: 0 8px 0 0; }
@@ -571,6 +602,7 @@
     .limi-fab { padding: 6px; }
   }
   @media (max-width: 560px) {
+    .stepper { grid-template-columns: 1fr; }
     .stats, .cat-grid, .res-grid { grid-template-columns: 1fr 1fr; }
     .hero-value { font-size: 40px; }
     .check-table .col-ball, .check-table td.c-ball { display: none; }
@@ -592,10 +624,11 @@
     </div>
     <div class="nav-label">프로젝트</div>
     <button type="button" class="nav-btn" data-view="overview"><span data-icon="home"></span>오늘</button>
-    <button type="button" class="nav-btn" data-view="kickoff"><span data-icon="check"></span>킥오프 체크리스트<span class="count" id="nav-kickoff"></span></button>
+    <button type="button" class="nav-btn" data-view="kickoff" data-internal><span data-icon="check"></span>킥오프 체크리스트<span class="count" id="nav-kickoff"></span></button>
+    <button type="button" class="nav-btn" data-view="requests"><span data-icon="send"></span>고객사 요청<span class="count" id="nav-requests"></span></button>
     <button type="button" class="nav-btn" data-view="schedule" data-internal><span data-icon="chart"></span>일정·속도</button>
     <button type="button" class="nav-btn" data-view="issues" data-internal><span data-icon="list"></span>이슈<span class="count" id="nav-issues"></span></button>
-    <button type="button" class="nav-btn" data-view="resources"><span data-icon="link"></span>리소스·연결</button>
+    <button type="button" class="nav-btn" data-view="resources" data-internal><span data-icon="link"></span>리소스·연결</button>
     <div class="sidebar-foot" data-internal>
       <div id="sync-info"></div>
       <div style="margin-top:6px">갱신: <code>pm sync</code></div>

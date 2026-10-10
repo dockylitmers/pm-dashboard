@@ -606,6 +606,7 @@
           <div class="card stat"><div class="stat-label"><span>킥오프 준비</span>${icon("check")}</div><div class="stat-value num">${readiness.ready}<small> / ${readiness.total} 확정</small></div><div class="meter" aria-hidden="true"><span style="width:${readiness.percent}%;background:var(--good)"></span></div></div>
           <div class="card stat"><div class="stat-label"><span>고객사 대기</span>${icon("clock")}</div><div class="stat-value num">${waiting.length}<small>건</small></div><div class="stat-note">${waiting[0] ? `가장 오래된 것 D+${waiting[0].waitDays} · ${esc(waiting[0].title)}` : "기다리는 자료 없음"}</div></div>
         </div>
+        ${model.kickoff.active ? `<section class="card span-12" data-internal><div class="card-head"><h2>킥오프 진행 ${model.kickoff.completed}/${model.kickoff.stages.length}</h2><button class="link-btn" data-go="kickoff">킥오프 화면 →</button></div>${stepperHtml(model)}<h3 style="font-size:13px;margin:16px 0 6px">이번 주 할 일</h3>${weekHtml(model, 5)}</section>` : ""}
         <section class="card span-12">
           <div class="card-head"><h2>전체 일정</h2><span class="sub">${F.shortDate(project.timeline.start)} ~ ${F.shortDate(project.timeline.end)}</span></div>
           ${timelineHtml(model)}
@@ -700,7 +701,7 @@
           .sort((a, b) => STATUS[a.status].order - STATUS[b.status].order);
         if (!rows.length) return "";
         return `<div class="check-group"><h3>${esc(cat.name)} <span class="muted num" style="font-weight:500">${rows.length}</span></h3>
-          <table class="check-table"><thead><tr><th>항목</th><th class="col-status">상태</th><th class="col-ball">공</th><th class="col-res">리소스</th><th class="col-wait">대기</th><th class="col-blocks">막는 일정</th></tr></thead><tbody>
+          <table class="check-table"><thead><tr><th>항목</th><th class="col-status">상태</th><th class="col-ball">공</th><th class="col-res">리소스</th><th class="col-wait">대기·요청</th><th class="col-blocks">막는 일정</th></tr></thead><tbody>
           ${rows
             .map(
               (item) => `<tr data-item="${esc(item.id)}" tabindex="0">
@@ -708,8 +709,8 @@
                 <td>${chip(STATUS[item.status])}</td>
                 <td class="c-ball"><span class="ball ${esc(item.ball)}">${esc(BALL[item.ball] || "-")}</span></td>
                 <td class="c-res">${item.res?.url ? `<span class="res">${icon("link")}<span>${esc(item.res.label)}</span></span>` : item.res?.label ? `<span class="res">${icon("doc")}<span>${esc(item.res.label)}</span></span>` : `<span class="res none">${icon("plug")}<span>연결 안 됨</span></span>`}</td>
-                <td>${item.waitDays != null ? `<span class="wait ${item.overdue ? "late" : ""} num">D+${item.waitDays}</span>` : item.due ? `<span class="wait ${item.overdue ? "late" : ""} num">~${F.monthDay(item.due)}</span>` : '<span class="muted">-</span>'}</td>
-                <td class="c-blocks"><span class="soft" style="font-size:12px">${esc(item.blocks || "-")}</span></td>
+                <td>${item.waitDays != null ? `<span class="wait ${item.overdue ? "late" : ""} num">D+${item.waitDays}</span>` : item.status === "missing" && item.askBy ? `<span class="wait ${item.late ? "late" : ""} num" title="이 날까지 요청해야 일정에 맞음">~${F.monthDay(item.askBy)} 요청</span>` : item.due ? `<span class="wait ${item.overdue ? "late" : ""} num">~${F.monthDay(item.due)}</span>` : '<span class="muted">-</span>'}</td>
+                <td class="c-blocks"><span class="soft" style="font-size:12px">${esc(item.blocks || "-")}${item.blocksDate ? ` ${F.monthDay(item.blocksDate)}` : ""}</span></td>
               </tr>`,
             )
             .join("")}
@@ -724,6 +725,12 @@
           <button class="btn" data-srs-wizard>${icon("sparkles")}SRS 생성 도우미</button>
           ${model.missing.length ? `<button class="btn accent" data-batch-requests data-internal>${icon("send")}없는 자료 요청서 한꺼번에 (${model.missing.length})</button>` : ""}
         </div>
+      </div>
+      <div class="grid g-12" style="margin-bottom:16px">
+        <section class="card span-12"><div class="card-head"><h2>킥오프 ${model.kickoff.completed}/${model.kickoff.stages.length}단계</h2><button class="link-btn" data-doc="kickoff">킥오프 회의 자료 →</button></div>${stepperHtml(model)}</section>
+        <section class="card span-7"><div class="card-head"><h2>이번 주 할 일</h2><span class="sub">요청 시작일이 지난 것부터</span></div>${weekHtml(model)}</section>
+        <section class="card span-5"><div class="card-head"><h2>개발 범위</h2><button class="link-btn" data-go="requests">고객사 요청 목록 →</button></div>${scopeHtml(project)}</section>
+        ${contractHtml(model)}
       </div>
       <div class="cat-grid">${cats
         .map(
@@ -1693,6 +1700,7 @@
     return `
       <div class="view-head"><div><h1>리소스·연결</h1><p>원본은 각 도구에 두고, 대시보드는 위치와 상태만 모읍니다. 체크리스트 항목은 여기 연결한 리소스를 가리킵니다.</p></div></div>
       <div class="grid g-12" style="margin-bottom:16px">
+        ${docsCardHtml()}
         <section class="card span-8">
           <div class="card-head"><h2>요구사항 명세 (SRS)</h2>${srs.exists ? chip({ cls: "info", icon: "inbox" }, "있음 · 고객 확인 중") : chip({ cls: "crit", icon: "alert" }, "없음")}</div>
           ${
@@ -1737,8 +1745,267 @@
     });
   }
 
+
+  // ---------------------------------------------------------------- 킥오프 진행·고객사 요청·계약·문서
+  const Docs = window.PMDocs;
+  const LIB = window.PM_LIBRARY || { features: [], categories: [] };
+  const featureLabel = (key) => LIB.features.find((f) => f.key === key)?.label || key;
+
+  function stepperHtml(model) {
+    const ko = model.kickoff;
+    return `<ol class="stepper">${ko.stages
+      .map((st, i) => {
+        const cls = st.complete ? "done" : ko.current?.id === st.id ? "now" : "";
+        const pct = st.total ? Math.round((st.done / st.total) * 100) : 100;
+        return `<li class="step-item ${cls}"><span class="step-no">${st.complete ? icon("ok") : i + 1}</span><div style="min-width:0;flex:1"><b>${esc(st.name)}</b><span class="muted num"> ${st.done}/${st.total}</span><div class="step-hint">${esc(st.hint)}</div><div class="meter"><span style="width:${pct}%;background:${st.complete ? "var(--good)" : "var(--accent)"}"></span></div></div></li>`;
+      })
+      .join("")}</ol>`;
+  }
+
+  function weekHtml(model, limit = 8) {
+    const week = model.thisWeek;
+    if (!week.length) return '<div class="empty"><b>이번 주 할 일이 없어요</b>요청한 자료의 회신을 기다리는 중입니다.</div>';
+    return `<div class="list">${week
+      .slice(0, limit)
+      .map((a) => {
+        const target = a.item ? `data-item="${esc(a.item)}"` : a.type === "contract" ? 'data-go="kickoff" data-anchor="contract"' : a.type === "sprint" ? 'data-go="schedule"' : "";
+        return `<button class="row-btn list-row" ${target}><div><div class="t">${a.late ? `<span class="chip crit" style="margin-right:6px">${icon("alert")}늦음</span>` : ""}${esc(a.text)}</div></div><span class="muted num" style="font-size:12px">${a.date ? F.monthDay(a.date) : ""}</span></button>`;
+      })
+      .join("")}${week.length > limit ? `<div class="card-foot">외 ${week.length - limit}개</div>` : ""}</div>`;
+  }
+
+  function scopeHtml(project) {
+    const features = project.scope?.features || [];
+    return `<div class="btn-row">${features.length ? features.map((key) => `<span class="chip outline">${esc(featureLabel(key))}</span>`).join("") : '<span class="muted">아직 고르지 않았어요</span>'}</div>
+      <p class="muted" style="font-size:12px;margin:10px 0 0">범위를 바꾸면 체크리스트와 고객사 요청 목록이 같이 바뀝니다. Claude에게 “결제 기능 추가해 줘”라고 하거나 <code>pm scope --add payment</code>.</p>`;
+  }
+
+  function contractHtml(model) {
+    const c = model.contract;
+    const review = model.project.contract?.review || [];
+    if (!c) return "";
+    const rows = review
+      .map((r) => {
+        const st = r.status || "unchecked";
+        const control = SERVER
+          ? `<select class="search" style="min-width:0" data-review="${esc(r.id)}" aria-label="${esc(r.title)} 상태">${Object.entries(Core.CONTRACT_REVIEW)
+              .map(([key, meta]) => `<option value="${key}" ${key === st ? "selected" : ""}>${esc(meta.label)}</option>`)
+              .join("")}</select>`
+          : chip(Core.CONTRACT_REVIEW[st]);
+        return `<tr><td><div class="title">${esc(r.title)}</div><div class="note">${esc(r.note || r.why || "")}</div></td><td style="width:130px">${control}</td></tr>`;
+      })
+      .join("");
+    const pays = c.payments
+      .map(
+        (p) =>
+          `<div class="list-row"><div><div class="t">${esc(p.name)}${p.ratio ? ` <span class="muted num">${p.ratio}%</span>` : ""}</div><div class="d">${esc(p.trigger)}${p.dueDate ? ` · ${F.shortDate(p.dueDate)} 예정` : ""}${p.paidAt ? ` · ${p.paidAt} 받음` : ""}</div></div><div class="btn-row">${chip({ cls: p.status === "paid" ? "good" : p.status === "invoiced" ? "warn" : "neutral", icon: p.status === "paid" ? "ok" : "clock" }, Core.PAYMENT_STATUS[p.status])}${SERVER && p.status !== "paid" ? `<button class="btn small" data-pay="${esc(p.name)}" data-pay-status="${p.status === "planned" ? "invoiced" : "paid"}">${p.status === "planned" ? "청구함" : "받음"}</button>` : ""}</div></div>`,
+      )
+      .join("");
+    return `<section class="card span-12" id="contract" data-internal>
+      <div class="card-head"><h2>계약 점검</h2><span class="sub">${c.signed ? `체결 ${esc(c.signedAt)}` : "체결 전"} · 있음 ${c.review.ok} · 불리·모호 ${c.review.risk} · 없음 ${c.review.missing} · 확인 전 ${c.review.unchecked}</span></div>
+      <div class="grid g-12"><div class="span-8"><table class="check-table" style="table-layout:auto"><tbody>${rows}</tbody></table>
+      <p class="muted" style="font-size:12px">놓치기 쉬운 것을 점검하는 목록이고 법무 검토를 대신하지 않습니다. ${SERVER ? "" : "상태를 바꾸려면 pm serve로 열거나 Claude에게 말하세요."}</p></div>
+      <div class="span-4"><h3 style="font-size:13px;margin:0 0 6px">대금 단계</h3><div class="list">${pays || '<div class="empty">대금 단계가 없어요</div>'}</div>
+      <p class="muted" style="font-size:12px">잔금은 최종 검수 완료와 연결해 둡니다. 고객사 대기가 길어지면 검수일과 함께 밀립니다.</p></div></div>
+    </section>`;
+  }
+
+  function infoHtml(project, item) {
+    const lines = (item.fields || []).map(
+      (f) =>
+        `<div class="info-line"><span class="lbl">${esc(f.label)}</span> ${f.answer ? `<span class="ans">${esc(f.answer)}</span>` : f.proposal ? `<span class="prop">(제안) ${esc(Core.fill(f.proposal, project))}</span>` : '<span class="muted">—</span>'}</div>`,
+    );
+    if (item.answer) lines.push(`<div class="info-line"><span class="ans">ㄴ ${esc(item.answer)}</span></div>`);
+    return lines.join("") || '<span class="muted">—</span>';
+  }
+
+  function renderRequests(model) {
+    const { project, sheet } = model;
+    const groups = sheet.rounds.map((r) => ({ ...r, sent: true }));
+    if (!CLIENT && sheet.pending.length) groups.push({ date: null, items: sheet.pending, sent: false });
+    const catName = (id) => project.categories.find((c) => c.id === id)?.name || id;
+    const groupHtml = (g, idx) => {
+      const title = g.sent ? (idx === 0 ? `요청 ${g.date ? F.shortDate(g.date) : ""}` : `추가 확인 요청 ${F.shortDate(g.date)}`) : "이번에 보낼 요청";
+      let lastCat = null;
+      const rows = g.items
+        .map((item) => {
+          const showCat = item.cat !== lastCat;
+          lastCat = item.cat;
+          const star = g.items.some((i) => i.cat === item.cat && i.priority);
+          return `<tr ${CLIENT ? "" : `data-answer="${esc(item.id)}" tabindex="0"`}>
+            <td>${showCat ? `<b>${esc(catName(item.cat))}</b>${star ? " ⭐" : ""}` : ""}</td>
+            <td><div class="title">${esc(item.title)}</div><div style="margin-top:4px">${chip(STATUS[item.status])}</div></td>
+            <td>${esc(item.need ? Core.fill(item.need, project) : "")}${item.blocksDate ? `<div class="note">${esc(item.blocks)}(${F.monthDay(item.blocksDate)}) 전에 필요</div>` : ""}</td>
+            <td>${infoHtml(project, item)}</td>
+            <td>${item.askBy && item.status !== "confirmed" ? `<div class="wait ${item.late || item.overdue ? "late" : ""}">회신 ${F.shortDate(item.askBy)}까지</div>` : ""}${item.waitDays != null ? `<div class="note">요청 D+${item.waitDays}</div>` : ""}${item.note ? `<div class="note">${esc(item.note)}</div>` : ""}</td>
+          </tr>`;
+        })
+        .join("");
+      return `<div class="check-group"><h3>${esc(title)} <span class="muted num" style="font-weight:500">${g.items.length}</span></h3>
+        ${g.sent && idx > 0 ? `<p class="muted" style="font-size:12px;margin:-4px 0 8px">${esc(Docs.NEXT_GUIDE)}</p>` : ""}
+        <div style="overflow-x:auto"><table class="check-table sheet-table"><thead><tr><th class="col-cat">분야</th><th class="col-item">항목</th><th class="col-why">확인/요청 내용</th><th>정보</th><th class="col-note">비고</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    };
+    const st = sheet.stats;
+    return `
+      <div class="view-head">
+        <div><h1>${CLIENT ? "개발 관련 요청사항" : "고객사 확인 요청"}</h1><p>${CLIENT ? `${esc(project.name)} 개발에 필요한 자료와 확인 사항입니다.` : "개발 범위로 정해진 목록입니다. 고객사에 안내하고 답을 모읍니다."}</p></div>
+        <div class="btn-row" data-internal>
+          <button class="btn" data-doc="sheet-md">${icon("copy")}Markdown</button>
+          <button class="btn" data-doc="sheet-notion">${icon("doc")}Notion 형식</button>
+          ${sheet.pending.length ? `<button class="btn accent" data-mark-sent>${icon("send")}보낸 것으로 표시 (${sheet.pending.length})</button>` : ""}
+        </div>
+      </div>
+      <div class="callout info" style="margin-bottom:12px">${icon("doc")}<span>${esc(Docs.FIRST_GUIDE)}</span></div>
+      <div class="filters">
+        <div class="legend-row"><span class="prop">분홍</span> 우리가 채운 제안값 <span class="ans">노랑</span> 고객사 답 <span>⭐ 일정상 먼저 필요</span></div>
+        <span style="flex:1"></span>
+        <span class="meta-pill num">보냄 ${st.sent}/${st.total} · 답 ${st.answered} · 기다림 ${st.waiting}${CLIENT ? "" : ` · 보낼 것 ${sheet.pending.length}`}</span>
+      </div>
+      ${groups.length ? groups.map(groupHtml).join("") : '<section class="card"><div class="empty"><b>요청할 항목이 없어요</b>개발 범위를 정하면 목록이 만들어집니다.</div></section>'}
+      ${CLIENT ? "" : '<p class="muted" style="font-size:12px">항목을 누르면 고객사 답을 적을 수 있습니다. 고객사 공유본(pm build --client)에는 보낸 항목만 나옵니다.</p>'}`;
+  }
+
+  function saveAnswers(itemId, answers, note, confirm) {
+    const project = PROJECTS[state.projectId];
+    const base = project.checklist.find((i) => i.id === itemId);
+    if ([...Object.values(answers), note].some((v) => /비밀번호|password/i.test(v || ""))) {
+      toast("비밀번호는 적지 마세요. 계정은 권한 초대로 받습니다");
+      return false;
+    }
+    const status = confirm ? "confirmed" : "received";
+    const patch = { status, answeredAt: realToday(), updated: realToday() };
+    if (!confirm) patch.ball = "us";
+    if (note) patch.answer = note;
+    const log = `고객사 답 기록 · ${STATUS[status].label}`;
+    if (SERVER) {
+      for (const f of base.fields || []) if (f.label in answers) f.answer = answers[f.label];
+      Object.assign(base, patch);
+      base.history = [...(base.history || []), { date: realToday(), text: log }];
+      api(`/api/projects/${encodeURIComponent(project.id)}/items/${encodeURIComponent(itemId)}`, "POST", { patch, fieldAnswers: answers, logText: log });
+      render();
+    } else {
+      const current = getModel().checklist.find((i) => i.id === itemId);
+      const fields = (current.fields || []).map((f) => ({ ...f, answer: f.label in answers ? answers[f.label] : f.answer }));
+      setItem(itemId, { ...patch, fields }, log);
+    }
+    return true;
+  }
+
+  function openAnswerDrawer(itemId) {
+    const model = getModel();
+    const item = model.checklist.find((i) => i.id === itemId);
+    if (!item) return;
+    const fields = (item.fields || [])
+      .map(
+        (f) =>
+          `<label class="field">${esc(f.label)}<input data-field="${esc(f.label)}" value="${esc(f.answer || "")}" placeholder="${esc(f.proposal ? `(제안) ${Core.fill(f.proposal, model.project)}` : "")}"/></label>`,
+      )
+      .join("");
+    openDrawer({
+      kicker: '<span class="muted" style="font-size:12px">고객사 답 기록</span>',
+      title: item.title,
+      sub: `${chip(STATUS[item.status])}${item.askBy ? ` <span class="wait ${item.late || item.overdue ? "late" : ""}">회신 ${F.shortDate(item.askBy)}까지</span>` : ""}`,
+      body: `${item.need ? `<div class="callout">${icon("doc")}<span>${esc(Core.fill(item.need, model.project))}</span></div>` : ""}
+        ${fields || '<p class="muted">입력 칸이 없는 항목입니다. 아래에 답을 적으세요.</p>'}
+        <label class="field">기타 답 (ㄴ)<textarea id="ans-note" style="min-height:80px">${esc(item.answer || "")}</textarea></label>
+        <p class="muted" style="font-size:12px">비밀번호·키는 적지 마세요. 계정은 개발사 계정을 권한 초대로 받습니다. 빈 칸에 (제안)이 보이면 그 값이 우리 제안입니다.</p>
+        <div class="btn-row" style="margin-top:12px"><button class="btn" id="ans-save">${icon("inbox")}받음·검토로 저장</button><button class="btn accent" id="ans-confirm">${icon("ok")}확정</button><button class="btn" id="ans-accept">${icon("sparkles")}빈 칸은 제안값으로 확정</button></div>
+        <div class="section-title">${icon("send")}리마인드</div><div class="btn-row"><button class="btn small" id="ans-remind">요청서·리마인드 초안 열기</button></div>`,
+    });
+    const body = $("#drawer-body");
+    const collect = (fillProposals) => {
+      const answers = {};
+      for (const input of $$("input[data-field]", body)) {
+        const field = (item.fields || []).find((f) => f.label === input.dataset.field);
+        const value = input.value.trim() || (fillProposals && field?.proposal ? Core.fill(field.proposal, model.project) : "");
+        if (value) answers[input.dataset.field] = value;
+      }
+      return answers;
+    };
+    const done = (confirm, fillProposals) => {
+      if (saveAnswers(itemId, collect(fillProposals), $("#ans-note", body).value.trim(), confirm)) {
+        closeDrawer();
+        toast(confirm ? "확정했습니다" : "받은 답을 저장했습니다");
+      }
+    };
+    $("#ans-save", body).addEventListener("click", () => done(false, false));
+    $("#ans-confirm", body).addEventListener("click", () => done(true, false));
+    $("#ans-accept", body).addEventListener("click", () => done(true, true));
+    $("#ans-remind", body).addEventListener("click", () => {
+      closeDrawer();
+      openItem(itemId);
+    });
+    hydrateIcons(body);
+  }
+
+  function markSheetSent() {
+    const project = PROJECTS[state.projectId];
+    const pending = getModel().sheet.pending.map((i) => i.id);
+    const date = realToday();
+    const log = "고객사 확인 요청 목록으로 요청";
+    if (SERVER) {
+      for (const id of pending) {
+        const item = project.checklist.find((i) => i.id === id);
+        Object.assign(item, { status: "requested", requested: date, ball: "client", updated: date });
+        item.history = [...(item.history || []), { date, text: log }];
+      }
+      api(`/api/projects/${encodeURIComponent(project.id)}/sheet/sent`, "POST", { date, ids: pending });
+    } else {
+      const projectStore = projectOverrides(project.id);
+      for (const id of pending) {
+        const current = (projectStore[id] ||= {});
+        Object.assign(current, { status: "requested", requested: date, ball: "client", updated: date });
+        current.log = [...(current.log || []), { date, text: log }];
+      }
+      saveStore();
+    }
+    render();
+    toast(`${pending.length}건을 요청함으로 바꿨습니다`);
+  }
+
+  const DOCS = {
+    "sheet-md": { title: "고객사 확인 요청 목록 (Markdown)", note: "Notion·메일·문서에 붙여 넣습니다.", make: (m) => Docs.sheetDocument(m, { format: "md", company }) },
+    "sheet-notion": { title: "고객사 확인 요청 목록 (Notion 형식)", note: "Claude가 Notion 요청 페이지에 올릴 때 쓰는 형식입니다(분홍·노랑 배경 포함). Claude에게 “요청 목록 Notion에 올려 줘”라고 하면 확인을 받은 뒤 올립니다.", make: (m) => Docs.sheetDocument(m, { format: "notion", company }) },
+    kickoff: { title: "킥오프 회의 자료", note: "고객사와 함께 보는 판입니다.", make: (m) => Docs.kickoffKit(m, { company, features: LIB.features }) },
+    "kickoff-internal": { title: "킥오프 회의 자료 (내부 준비 포함)", note: "계약 점검·대금·위험이 들어 있어 고객사에 보내지 않습니다.", make: (m) => Docs.kickoffKit(m, { internal: true, company, features: LIB.features }) },
+    report: { title: "주간 진행상황 (내부)", note: "팀 채널용입니다. 속도·위험·결정이 들어 있습니다.", make: (m) => Docs.weeklyReport(m) },
+    "report-client": { title: "주간 진행상황 (고객사)", note: "고객사에 보내는 판입니다.", make: (m) => Docs.weeklyReport(m, { client: true }) },
+  };
+
+  function openDocDrawer(kind) {
+    const doc = DOCS[kind];
+    const text = doc.make(getModel());
+    openDrawer({
+      kicker: `<span class="muted" style="font-size:12px">${esc(getModel().project.name)} · 초안</span>`,
+      title: doc.title,
+      sub: `<span class="muted" style="font-size:12px">${esc(doc.note)} 보내는 것은 사람이 합니다.</span>`,
+      body: `<div class="btn-row" style="margin-bottom:10px"><button class="btn accent" id="doc-copy">${icon("copy")}복사</button></div><pre class="doc-pre">${esc(text)}</pre>`,
+    });
+    $("#doc-copy").addEventListener("click", () => copyText(text));
+    hydrateIcons($("#drawer-body"));
+  }
+
+  function docsCardHtml() {
+    return `<section class="card span-12" data-internal><div class="card-head"><h2>문서 만들기</h2><span class="sub">초안을 만들어 복사합니다</span></div>
+      <div class="btn-row">${Object.entries(DOCS)
+        .map(([kind, doc]) => `<button class="btn" data-doc="${kind}">${icon("doc")}${esc(doc.title)}</button>`)
+        .join("")}</div></section>`;
+  }
+
+  function renderEmpty() {
+    const ws = MODE.workspace ? `<code>${esc(MODE.workspace)}</code>` : "PM 워크스페이스";
+    return `<div class="view-head"><div><h1>시작하기</h1><p>${ws}에 아직 프로젝트가 없어요.</p></div></div>
+      <section class="card"><div class="steps">
+        <div class="step"><div class="step-head">PM 저장소 만들기</div>GitHub에 <b>비공개</b> 저장소를 하나 만들고 내려받습니다. 모든 프로젝트의 PM 기록이 여기에 쌓입니다.</div>
+        <div class="step"><div class="step-head">워크스페이스 세팅</div>내려받은 폴더에서 Claude에게 “PM 워크스페이스로 세팅해 줘”라고 하거나 <code>pm setup --company 회사이름</code>.</div>
+        <div class="step"><div class="step-head">프로젝트 등록</div>“새 프로젝트 등록해 줘. 고객사는 ○○, 앱·관리자·결제·카카오 로그인, 개발 10/26~12/18, 출시 1/15”. 범위를 말하면 고객사 요청 목록이 만들어집니다.</div>
+        <div class="step"><div class="step-head">킥오프</div>계약 점검 → 범위·SRS → 고객사 요청 목록 전달 → 기본 세팅(저장소 라벨·스프린트). 킥오프 회의 자료도 만들어 줍니다.</div>
+      </div></section>`;
+  }
+
   // ---------------------------------------------------------------- 렌더링과 이벤트
   const VIEWS = {
+    requests: renderRequests,
     overview: renderOverview,
     kickoff: renderKickoff,
     schedule: renderSchedule,
@@ -1763,6 +2030,9 @@
       ? `${model.missing.length}`
       : "";
     $("#nav-kickoff").classList.toggle("alert", model.missing.length > 0);
+    const pendingSheet = model.sheet.pending.length;
+    $("#nav-requests").textContent = pendingSheet ? `${pendingSheet}` : model.sheet.stats.waiting ? `${model.sheet.stats.waiting}` : "";
+    $("#nav-requests").classList.toggle("alert", pendingSheet > 0);
     $("#nav-issues").textContent = forecast
       ? fmt(forecast.issues.filter((i) => i.state === "open").length)
       : "";
@@ -1810,12 +2080,23 @@
   }
 
   document.addEventListener("click", (event) => {
-    const t = event.target.closest("button, tr[data-item], [data-item]");
+    const t = event.target.closest("button, tr[data-item], tr[data-answer], [data-item]");
     if (!t) return;
     if (t.matches(".nav-btn")) return navigate(t.dataset.view);
     if (t.dataset.go)
-      return navigate(t.dataset.go, { filter: t.dataset.filter });
+      return navigate(t.dataset.go, { filter: t.dataset.filter, anchor: t.dataset.anchor });
     if (t.dataset.item) return openItem(t.dataset.item);
+    if (t.dataset.answer) return openAnswerDrawer(t.dataset.answer);
+    if (t.dataset.doc) return openDocDrawer(t.dataset.doc);
+    if (t.hasAttribute("data-mark-sent")) return markSheetSent();
+    if (t.dataset.pay) {
+      const project = PROJECTS[state.projectId];
+      const payment = project.contract.payments.find((x) => x.name === t.dataset.pay);
+      payment.status = t.dataset.payStatus;
+      if (payment.status === "paid") payment.paidAt = realToday();
+      api(`/api/projects/${encodeURIComponent(project.id)}/contract/payment/${encodeURIComponent(payment.name)}`, "POST", { status: payment.status });
+      return render();
+    }
     if (t.dataset.brief != null) {
       const item = briefing()[Number(t.dataset.brief)];
       if (item)
@@ -1879,6 +2160,8 @@
     }
     if (event.key === "Enter" && event.target.matches("tr[data-item]"))
       openItem(event.target.dataset.item);
+    if (event.key === "Enter" && event.target.matches("tr[data-answer]"))
+      openAnswerDrawer(event.target.dataset.answer);
   });
   document.addEventListener("input", (event) => {
     const t = event.target;
@@ -1914,6 +2197,15 @@
       $(`[data-scn="${key}"]`)?.focus();
       return;
     }
+    if (t.dataset.review) {
+      const project = PROJECTS[state.projectId];
+      const row = project.contract.review.find((r) => r.id === t.dataset.review);
+      row.status = t.value;
+      api(`/api/projects/${encodeURIComponent(project.id)}/contract/review/${encodeURIComponent(row.id)}`, "POST", { status: t.value });
+      render();
+      document.getElementById("contract")?.scrollIntoView({ block: "center" });
+      return;
+    }
     const map = { "i-ms": "milestone", "i-lb": "label", "i-as": "assignee" };
     if (map[t.id]) {
       state.issues[map[t.id]] = t.value;
@@ -1934,8 +2226,7 @@
     document.body.classList.toggle("client-view", on);
     event.currentTarget.setAttribute("aria-pressed", String(on));
     window.PMAgent?.close();
-    if (on && (state.view === "schedule" || state.view === "issues"))
-      state.view = "overview";
+    if (on && ["schedule", "issues", "kickoff", "resources"].includes(state.view)) state.view = "requests";
     render();
   });
   $("#theme-btn").addEventListener("click", () => {
@@ -1949,17 +2240,31 @@
     render();
   });
 
+  // 주소의 #/<프로젝트>/<화면>이 바뀌면(뒤로 가기, 링크) 그 화면으로
+  window.addEventListener("hashchange", () => {
+    const [, hp, hv] = location.hash.match(/^#\/([^/]+)\/([^/]+)/) || [];
+    if ((PROJECTS[hp] && hp !== state.projectId) || (VIEWS[hv] && hv !== state.view)) {
+      if (PROJECTS[hp]) {
+        state.projectId = hp;
+        $("#project-select").value = hp;
+      }
+      navigate(VIEWS[hv] ? hv : state.view);
+    }
+  });
+
   // ---------------------------------------------------------------- 시작
   if (store.theme) document.documentElement.dataset.theme = store.theme;
   if (!projectIds.length) {
-    $("#content").innerHTML =
-      '<section class="card"><div class="empty"><b>등록된 프로젝트가 없어요</b>프로젝트 폴더에서 <code>pm init</code>으로 프로젝트를 만든 뒤 <code>pm build</code> 또는 <code>pm serve</code>로 여세요.</div></section>';
+    // 프로젝트가 없으면 시작 안내만 보여 준다
+    document.body.classList.add("no-projects");
+    $("#content").innerHTML = renderEmpty();
+    hydrateIcons(document);
     return;
   }
   if (CLIENT) {
     // 고객사 공유본은 내부 정보를 빼고 만든 파일이라 공유 보기로 고정한다
     document.body.classList.add("client-view", "client-only");
-    if (state.view === "schedule" || state.view === "issues") state.view = "overview";
+    if (["schedule", "issues", "kickoff", "resources"].includes(state.view) || !location.hash) state.view = "requests";
   }
   const [, hashProject, hashView] =
     location.hash.match(/^#\/([^/]+)\/([^/]+)/) || [];
@@ -2000,6 +2305,11 @@
     company,
     SERVER,
     CLIENT,
+    openDocDrawer,
+    openAnswerDrawer,
+    markSheetSent,
+    docText: (kind) => DOCS[kind]?.make(getModel()),
+    LIB,
     get state() {
       return state;
     },

@@ -81,6 +81,8 @@
   function renderChips() {
     const p = model.forecast?.project;
     const chips = ["오늘 뭐부터 해?"];
+    if (model.kickoff?.active) chips.push("이번 주 킥오프 할 일은?");
+    if (model.sheet?.pending.length || model.sheet?.stats.waiting) chips.push("고객사 요청 목록 정리해줘");
     if (p) chips.push(`${window.PMForecast.monthDay(p.target)} 맞출 수 있어?`);
     if (model.waiting.length) chips.push("고객사 답 기다리는 거 정리해줘");
     // 고객사에서 받아야 하는 정책 항목, 환불 관련을 먼저
@@ -97,6 +99,8 @@
     chips.push(
       model.project.srs?.exists ? "SRS 어디까지 됐어?" : "SRS 만들어줘",
     );
+    if (model.contract && !model.contract.reviewDone) chips.push("계약서 점검 어디까지 했어?");
+    chips.push("주간 보고 써줘");
     chips.push("위험 요소는?");
     els.chips.innerHTML = chips
       .map((c) => `<button type="button">${esc(c)}</button>`)
@@ -591,8 +595,64 @@
     }
   }
 
+  function kickoffReply() {
+    const ko = model.kickoff;
+    const lines = [`킥오프 <b>${ko.completed}/${ko.stages.length}단계</b>${ko.current ? `, 지금은 ‘${esc(ko.current.name)}’(${ko.current.done}/${ko.current.total})` : " 모두 끝났어요"}.`];
+    for (const st of ko.stages) lines.push(`${st.complete ? "✓" : "·"} ${esc(st.name)} ${st.done}/${st.total}`);
+    const week = model.thisWeek;
+    if (week.length) lines.push(`\n이번 주 할 일 (요청 시작일이 지난 것부터)\n${week.slice(0, 6).map((a) => `• ${a.late ? "<b>늦음</b> " : ""}${esc(a.text)}`).join("\n")}`);
+    addMessage("bot", lines.join("\n"), [
+      { label: "킥오프 화면", icon: "check", primary: true, run: () => App.navigate("kickoff") },
+      { label: "킥오프 회의 자료", icon: "doc", run: () => App.openDocDrawer("kickoff") },
+    ]);
+  }
+
+  function sheetReply() {
+    const sh = model.sheet;
+    const st = sh.stats;
+    const lines = [`고객사 확인 요청 목록 <b>${st.total}개</b>: 보냄 ${st.sent} · 답 ${st.answered} · 기다림 ${st.waiting} · 아직 안 보낸 것 <b>${sh.pending.length}</b>.`];
+    const star = model.checklist.filter((i) => i.inSheet && i.priority);
+    if (star.length) lines.push(`⭐ 일정상 먼저 필요한 것: ${star.slice(0, 5).map((i) => esc(i.title)).join(", ")}${star.length > 5 ? ` 외 ${star.length - 5}개` : ""}`);
+    lines.push("\n목록은 Notion 요청 페이지와 같은 모양(분야·항목·확인/요청 내용·정보·비고)이고, 우리 제안값은 분홍, 고객사 답은 노랑으로 표시돼요. 계정은 비밀번호 대신 권한 초대로 받게 안내했어요.");
+    if (sh.pending.length) lines.push("보낸 뒤 ‘보낸 것으로 표시’를 누르면 요청일부터 대기 일수를 셉니다.");
+    addMessage("bot", lines.join("\n"), [
+      { label: "요청 목록 보기", icon: "send", primary: true, run: () => App.navigate("requests") },
+      { label: "Markdown 복사용", icon: "copy", run: () => App.openDocDrawer("sheet-md") },
+      { label: "Notion 형식", icon: "doc", run: () => App.openDocDrawer("sheet-notion") },
+    ]);
+  }
+
+  function contractReply() {
+    const c = model.contract;
+    if (!c) return addMessage("bot", "이 프로젝트에는 계약 점검 목록이 없어요.");
+    const review = model.project.contract?.review || [];
+    const flagged = review.filter((r) => r.status === "risk" || r.status === "missing");
+    const lines = [`계약 ${c.signed ? `체결(${esc(c.signedAt)})` : "체결 전"} · 점검 있음 ${c.review.ok}/${c.review.total}, 불리·모호 <b>${c.review.risk}</b>, 없음 <b>${c.review.missing}</b>, 확인 전 ${c.review.unchecked}.`];
+    if (flagged.length) lines.push(`\n먼저 볼 것\n${flagged.map((r) => `• ${esc(r.title)}${r.note ? ` — ${esc(r.note)}` : ""}`).join("\n")}`);
+    if (c.next) lines.push(`\n다음 대금: ${esc(c.next.name)} ${c.next.ratio ? `${c.next.ratio}% ` : ""}(${esc(c.next.trigger)}${c.next.dueDate ? `, ${window.PMForecast.shortDate(c.next.dueDate)} 예정` : ""})`);
+    lines.push("\n이 목록은 놓치기 쉬운 것을 점검하는 용도이고 법무 검토를 대신하지 않아요.");
+    addMessage("bot", lines.join("\n"), [{ label: "계약 점검 보기", icon: "check", primary: true, run: () => App.navigate("kickoff", { anchor: "contract" }) }]);
+  }
+
   function localReply(text) {
     const t = text.toLowerCase();
+    if (/주간\s*보고|진행\s*상황\s*보고|보고\s*써/.test(t)) {
+      addMessage("bot", "이번 주 진행상황 초안을 만들었어요. 고객사용은 속도·위험 같은 내부 판단을 뺀 판이에요.", [
+        { label: "내부용 보기", icon: "doc", primary: true, run: () => App.openDocDrawer("report") },
+        { label: "고객사용 보기", icon: "send", run: () => App.openDocDrawer("report-client") },
+      ]);
+      return;
+    }
+    if (/회의\s*자료|킥오프\s*회의|안건/.test(t)) {
+      addMessage("bot", "킥오프 회의 자료(개요·일정·소통 방식·검수와 변경 관리·요청할 것·첫 2주 계획·정할 것)를 만들었어요.", [
+        { label: "고객사와 보는 판", icon: "doc", primary: true, run: () => App.openDocDrawer("kickoff") },
+        { label: "내부 준비 포함", icon: "eye", run: () => App.openDocDrawer("kickoff-internal") },
+      ]);
+      return;
+    }
+    if (/계약|대금|잔금|착수금/.test(t)) return contractReply();
+    if (/요청\s*목록|요청사항|확인\s*요청|고객사에\s*안내|안내본/.test(t)) return sheetReply();
+    if (/킥오프|이번\s*주|단계/.test(t)) return kickoffReply();
     if (/srs|요구사항|명세/.test(t)) return srsReply();
     if (/결정/.test(t)) return decisionReply(text);
     const item = matchItem(text);
@@ -646,7 +706,9 @@
 - 고객사에 보내는 글은 결론만 쓴다. 이슈 번호, 내부 메모, 코드 용어를 넣지 않는다.
 - 결정을 도울 때는 권장안 먼저, 선택지 2~3개, 기한, 정하지 않으면 막히는 것을 쓴다.
 - 너는 아무것도 직접 보내지 않는다. 요청서·리마인드는 draft_client_request 도구로 승인 대기열에 넣고, 사람이 읽고 보낸다고 말한다.
-- 화면을 보여 주는 게 도움이 되면 open_view 도구로 해당 화면을 연다.`;
+- 화면을 보여 주는 게 도움이 되면 open_view 도구로 해당 화면을 연다.
+- 고객사 확인 요청 목록은 '분야·항목·확인/요청 내용·정보·비고' 표다. 정보 칸의 제안값은 분홍, 고객사 답은 노랑. 계정은 비밀번호가 아니라 권한 초대로 받는다.
+- 킥오프 중이면 4단계(계약 확인 → 범위·SRS → 고객사 요청 → 기본 세팅)와 이번 주 할 일을 먼저 말한다.`;
 
   const TOOLS = [
     {
@@ -734,7 +796,7 @@
         properties: {
           view: {
             type: "string",
-            enum: ["overview", "kickoff", "schedule", "issues", "resources"],
+            enum: ["overview", "kickoff", "requests", "schedule", "issues", "resources"],
           },
           item_id: { type: "string", description: "열 체크리스트 항목(선택)" },
           filter: {
@@ -743,6 +805,17 @@
           },
         },
         required: ["view"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "make_document",
+      description:
+        "초안 문서를 만든다: sheet_md(고객사 확인 요청 목록, Markdown), sheet_notion(같은 목록, Notion 요청 페이지 형식·분홍/노랑 배경), kickoff(킥오프 회의 자료), kickoff_internal(내부 준비 포함), report(주간 진행상황 내부용), report_client(고객사용). 사용자 화면에 열고 본문을 돌려준다. 보내지 않는다.",
+      input_schema: {
+        type: "object",
+        properties: { kind: { type: "string", enum: ["sheet_md", "sheet_notion", "kickoff", "kickoff_internal", "report", "report_client"] } },
+        required: ["kind"],
         additionalProperties: false,
       },
     },
@@ -814,12 +887,19 @@
           }
         : null,
       readiness: m.readiness,
+      scope: (m.project.scope?.features || []).map((key) => App.LIB.features.find((f) => f.key === key)?.label || key),
+      kickoff: m.kickoff.active ? { completed: m.kickoff.completed, current: m.kickoff.current?.name || null, stages: m.kickoff.stages.map((st) => ({ name: st.name, done: st.done, total: st.total })) } : null,
+      thisWeek: m.thisWeek.map((a) => ({ text: a.text, late: a.late, item: a.item || null })),
+      requestSheet: { ...m.sheet.stats, pending: m.sheet.pending.map((i) => i.id) },
+      contract: m.contract ? { signed: m.contract.signed, review: m.contract.review, flagged: (m.project.contract?.review || []).filter((r) => r.status === "risk" || r.status === "missing").map((r) => ({ title: r.title, note: r.note || null })), nextPayment: m.contract.next ? { name: m.contract.next.name, trigger: m.contract.next.trigger, due: m.contract.next.dueDate } : null } : null,
       checklist: m.checklist.map((i) => ({
         id: i.id,
         category: m.project.categories.find((c) => c.id === i.cat)?.name,
         title: i.title,
         status: App.STATUS[i.status].label,
         ball: App.BALL[i.ball],
+        askBy: i.askBy || null,
+        fields: (i.fields || []).map((f) => ({ label: f.label, proposal: f.proposal || null, answer: f.answer || null })),
         waitDays: i.waitDays,
         requested: i.requested || null,
         due: i.due || null,
@@ -959,6 +1039,13 @@
       case "open_srs_wizard":
         App.openSrsWizard({ reset: true });
         return { opened: "srs_wizard" };
+      case "make_document": {
+        const kind = String(input.kind || "").replace("_", "-");
+        const text = App.docText(kind);
+        if (!text) return { error: `모르는 문서 ${input.kind}` };
+        App.openDocDrawer(kind);
+        return { kind: input.kind, text, note: "초안이다. 사용자가 읽고 보낸다." };
+      }
       default:
         return { error: `알 수 없는 도구 ${name}` };
     }

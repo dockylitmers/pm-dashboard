@@ -1,0 +1,1253 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "contract",
+      "name": "계약·범위"
+    },
+    {
+      "id": "setup",
+      "name": "소통·기본 세팅"
+    },
+    {
+      "id": "business",
+      "name": "사업자·운영 정보"
+    },
+    {
+      "id": "policy",
+      "name": "정책·약관"
+    },
+    {
+      "id": "accounts",
+      "name": "계정·외부 연동"
+    },
+    {
+      "id": "design",
+      "name": "브랜드·콘텐츠"
+    },
+    {
+      "id": "ops",
+      "name": "운영·출시"
+    }
+  ],
+  "features": [
+    {
+      "key": "app",
+      "group": "플랫폼",
+      "label": "모바일 앱 (iOS·Android)"
+    },
+    {
+      "key": "web",
+      "group": "플랫폼",
+      "label": "고객 웹"
+    },
+    {
+      "key": "admin",
+      "group": "플랫폼",
+      "label": "관리자 웹"
+    },
+    {
+      "key": "payment",
+      "group": "기능",
+      "label": "결제·환불"
+    },
+    {
+      "key": "social-kakao",
+      "group": "로그인",
+      "label": "카카오 로그인"
+    },
+    {
+      "key": "social-naver",
+      "group": "로그인",
+      "label": "네이버 로그인"
+    },
+    {
+      "key": "social-apple",
+      "group": "로그인",
+      "label": "Apple 로그인",
+      "note": "앱에 소셜 로그인이 있으면 iOS 심사에 필요"
+    },
+    {
+      "key": "social-google",
+      "group": "로그인",
+      "label": "Google 로그인"
+    },
+    {
+      "key": "sms",
+      "group": "발송",
+      "label": "문자 발송"
+    },
+    {
+      "key": "alimtalk",
+      "group": "발송",
+      "label": "카카오 알림톡"
+    },
+    {
+      "key": "email",
+      "group": "발송",
+      "label": "이메일 발송"
+    },
+    {
+      "key": "push",
+      "group": "발송",
+      "label": "앱 푸시"
+    },
+    {
+      "key": "marketing",
+      "group": "발송",
+      "label": "광고성 메시지(마케팅 수신)"
+    },
+    {
+      "key": "membership",
+      "group": "기능",
+      "label": "회원 등급·포인트·쿠폰"
+    },
+    {
+      "key": "content",
+      "group": "기능",
+      "label": "공지·FAQ·이벤트 콘텐츠"
+    },
+    {
+      "key": "support",
+      "group": "기능",
+      "label": "1:1 문의·고객센터"
+    },
+    {
+      "key": "commerce",
+      "group": "기능",
+      "label": "상품 판매(상품·가격 데이터)"
+    },
+    {
+      "key": "location",
+      "group": "기능",
+      "label": "위치 정보 사용"
+    },
+    {
+      "key": "vendor",
+      "group": "연동",
+      "label": "외부 공급사 API 연동"
+    }
+  ],
+  "items": [
+    {
+      "id": "contract",
+      "cat": "contract",
+      "title": "계약서·견적서",
+      "ball": "us",
+      "sheet": false,
+      "when": [],
+      "needBy": "kickoff",
+      "leadDays": 0,
+      "fields": [],
+      "need": "서명한 계약서와 기능 목록이 들어간 최종 견적서",
+      "note": "범위 판단의 1순위 근거"
+    },
+    {
+      "id": "scope",
+      "cat": "contract",
+      "title": "개발 범위(기능 목록) 기준선",
+      "ball": "us",
+      "sheet": false,
+      "when": [],
+      "needBy": "kickoff",
+      "leadDays": 0,
+      "fields": [],
+      "proposal": "견적서 기능 목록을 범위 기준선으로 쓴다"
+    },
+    {
+      "id": "srs",
+      "cat": "contract",
+      "title": "요구사항 명세서(SRS)",
+      "ball": "us",
+      "sheet": true,
+      "when": [],
+      "needBy": "devStart",
+      "leadDays": 10,
+      "fields": [
+        {
+          "label": "확인 담당자"
+        },
+        {
+          "label": "확인 기한",
+          "proposal": "{devStart} 전"
+        }
+      ],
+      "helper": "srs",
+      "need": "SRS 초안의 (확인 요청) 항목 답변",
+      "note": "개발사가 초안을 드리고 확인을 받습니다",
+      "mode": "draft"
+    },
+    {
+      "id": "schedule",
+      "cat": "contract",
+      "title": "일정 합의(개발·QA·출시)",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "devStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "개발 기간",
+          "proposal": "{devStart}~{devEnd}"
+        },
+        {
+          "label": "고객사 QA 기간",
+          "proposal": "{qaStart}~{qaEnd}"
+        },
+        {
+          "label": "출시일",
+          "proposal": "{launch}"
+        }
+      ],
+      "need": "개발·고객사 QA·출시 일정 확인"
+    },
+    {
+      "id": "acceptance",
+      "cat": "contract",
+      "title": "검수 기준·하자 보수 기간",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "devStart",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "검수 기간",
+          "proposal": "QA 시작 후 10영업일"
+        },
+        {
+          "label": "통과 기준",
+          "proposal": "중대 버그 0건"
+        },
+        {
+          "label": "하자 보수 기간",
+          "proposal": "출시 후 3개월"
+        }
+      ],
+      "need": "검수 통과 기준과 하자 보수 기간 확인",
+      "proposal": "중대 버그 0건이면 검수 통과, 검수 기간 10영업일, 하자 보수 출시 후 3개월"
+    },
+    {
+      "id": "change-request",
+      "cat": "contract",
+      "title": "변경 요청 절차",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "devStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "요청 창구",
+          "proposal": "요청 DB"
+        },
+        {
+          "label": "처리 방식",
+          "proposal": "영향(일정·비용) 안내 → 승인 → 진행"
+        }
+      ],
+      "need": "범위 밖 요청을 다루는 방법 확인",
+      "proposal": "범위에 없는 요청은 일정·비용 영향을 먼저 안내하고 승인 뒤 진행"
+    },
+    {
+      "id": "contacts",
+      "cat": "setup",
+      "title": "고객사 담당자·결정권자",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "kickoff",
+      "leadDays": 2,
+      "fields": [
+        {
+          "label": "실무 담당자(이름·연락처)"
+        },
+        {
+          "label": "최종 결정권자"
+        },
+        {
+          "label": "연락 가능 시간",
+          "proposal": "평일 10~18시"
+        }
+      ],
+      "need": "실무 담당자와 최종 결정권자, 연락 가능 시간"
+    },
+    {
+      "id": "channel",
+      "cat": "setup",
+      "title": "고객 소통 채널(요청 DB)",
+      "ball": "us",
+      "sheet": true,
+      "when": [],
+      "needBy": "kickoff",
+      "leadDays": 1,
+      "fields": [
+        {
+          "label": "소통 채널",
+          "proposal": "요청 DB"
+        },
+        {
+          "label": "메신저 사용 여부(O/X)"
+        }
+      ],
+      "need": "요청·답·합의를 남길 곳 확인",
+      "proposal": "요청 DB 하나에 요청과 답을 남기고 메신저 대화의 결론도 옮겨 적기"
+    },
+    {
+      "id": "report",
+      "cat": "setup",
+      "title": "정기 보고·회의 방식",
+      "ball": "us",
+      "sheet": true,
+      "when": [],
+      "needBy": "kickoff",
+      "leadDays": 1,
+      "fields": [
+        {
+          "label": "진행 보고",
+          "proposal": "매주 금요일"
+        },
+        {
+          "label": "정기 회의",
+          "proposal": "격주 30분"
+        }
+      ],
+      "need": "보고 주기와 회의 일정 확인",
+      "proposal": "매주 금요일 진행상황 공유, 격주 30분 회의"
+    },
+    {
+      "id": "repo",
+      "cat": "setup",
+      "title": "저장소·접근 권한",
+      "ball": "us",
+      "sheet": false,
+      "when": [],
+      "needBy": "devStart",
+      "leadDays": 2,
+      "fields": [],
+      "note": "GitHub 저장소를 정하고 project.json의 github.repo에 적는다"
+    },
+    {
+      "id": "labels",
+      "cat": "setup",
+      "title": "이슈 라벨·스프린트 마일스톤",
+      "ball": "us",
+      "sheet": false,
+      "when": [],
+      "needBy": "devStart",
+      "leadDays": 1,
+      "fields": [],
+      "note": "pm setup-repo로 만든다. 일정 예측이 이 규칙을 쓴다"
+    },
+    {
+      "id": "envs",
+      "cat": "setup",
+      "title": "개발·운영 환경 계획",
+      "ball": "dev",
+      "sheet": false,
+      "when": [],
+      "needBy": "devMid",
+      "leadDays": 5,
+      "fields": [],
+      "note": "개발·검수·운영 서버, 배포 담당, 백업"
+    },
+    {
+      "id": "cloud",
+      "cat": "setup",
+      "title": "클라우드·서버 계정",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "devStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "클라우드 서비스",
+          "proposal": "AWS"
+        },
+        {
+          "label": "개발사를 초대할 계정 이메일"
+        },
+        {
+          "label": "2단계 인증 가능 담당자"
+        }
+      ],
+      "need": "서버를 둘 클라우드 계정(고객사 명의)",
+      "proposal": "고객사 명의 계정에 개발사 관리자를 초대"
+    },
+    {
+      "id": "domain",
+      "cat": "setup",
+      "title": "서비스 도메인·DNS 권한",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "devMid",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "사용할 도메인"
+        },
+        {
+          "label": "DNS 관리 업체·담당자"
+        },
+        {
+          "label": "설정 가능 일정"
+        }
+      ],
+      "need": "도메인 구매 여부와 DNS를 바꿀 수 있는 권한"
+    },
+    {
+      "id": "business-info",
+      "cat": "business",
+      "title": "사업자 정보·통신판매업 신고번호",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "qaStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "상호(법인명)"
+        },
+        {
+          "label": "사업자등록번호"
+        },
+        {
+          "label": "대표자명"
+        },
+        {
+          "label": "사업장 주소"
+        },
+        {
+          "label": "대표 전화"
+        },
+        {
+          "label": "통신판매업 신고번호"
+        }
+      ],
+      "need": "상호, 대표자, 사업자등록번호, 통신판매업 신고번호, 주소(화면 하단 표시용)"
+    },
+    {
+      "id": "cs",
+      "cat": "business",
+      "title": "고객센터 운영 시간·전화번호",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "qaStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "운영 시간",
+          "proposal": "평일 09:00~18:00 (점심 12:00~13:00), 주말·공휴일 휴무"
+        },
+        {
+          "label": "대표 전화번호"
+        }
+      ],
+      "need": "고객에게 안내할 운영 시간과 대표 전화번호",
+      "proposal": "평일 09:00~18:00 (점심 12:00~13:00), 주말·공휴일 휴무"
+    },
+    {
+      "id": "cs-email",
+      "cat": "business",
+      "title": "고객 문의 이메일",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "qaStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "문의 이메일"
+        },
+        {
+          "label": "탈퇴 요청 이메일"
+        },
+        {
+          "label": "이메일 확인 담당자"
+        }
+      ],
+      "need": "고객 문의·탈퇴 요청을 받을 이메일"
+    },
+    {
+      "id": "privacy-officer",
+      "cat": "business",
+      "title": "개인정보 보호책임자",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "storeSubmit",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "성명"
+        },
+        {
+          "label": "소속·직책"
+        },
+        {
+          "label": "전화"
+        },
+        {
+          "label": "이메일"
+        }
+      ],
+      "need": "처리방침에 적을 보호책임자 이름·직책·연락처(실제 담당자)"
+    },
+    {
+      "id": "ops-mail",
+      "cat": "business",
+      "title": "운영 알림 수신 메일",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "admin"
+      ],
+      "needBy": "qaStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "운영 알림 메일"
+        }
+      ],
+      "need": "주문·오류 알림을 받을 운영 메일 주소 1개"
+    },
+    {
+      "id": "admin-accounts",
+      "cat": "business",
+      "title": "관리자 계정·권한",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "admin"
+      ],
+      "needBy": "qaStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "최고 관리자 이메일"
+        },
+        {
+          "label": "초기 운영자 목록"
+        },
+        {
+          "label": "권한 단계",
+          "proposal": "최고 관리자 / 관리자 두 단계"
+        }
+      ],
+      "need": "관리자로 쓸 사람 수와 권한 단계",
+      "proposal": "최고 관리자 1명 + 관리자 n명 두 단계"
+    },
+    {
+      "id": "terms",
+      "cat": "policy",
+      "title": "이용약관",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "storeSubmit",
+      "leadDays": 14,
+      "fields": [
+        {
+          "label": "검토 담당자"
+        },
+        {
+          "label": "확인 기한",
+          "proposal": "{storeSubmit} 2주 전"
+        }
+      ],
+      "mode": "draft",
+      "need": "서비스 이용약관 확인",
+      "proposal": "표준 약관을 바탕으로 개발사가 초안을 작성"
+    },
+    {
+      "id": "privacy",
+      "cat": "policy",
+      "title": "개인정보처리방침",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "storeSubmit",
+      "leadDays": 14,
+      "fields": [
+        {
+          "label": "처리 위탁 업체·업무"
+        },
+        {
+          "label": "제3자 제공 여부(O/X)"
+        },
+        {
+          "label": "보관 기간",
+          "proposal": "탈퇴 시 즉시 파기, 거래 기록 5년"
+        },
+        {
+          "label": "검토 담당자"
+        }
+      ],
+      "mode": "draft",
+      "need": "수집 항목·보관 기간·위탁사 확인",
+      "proposal": "앱 기능 기준으로 개발사가 초안을 작성"
+    },
+    {
+      "id": "refund",
+      "cat": "policy",
+      "title": "취소·환불 정책",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "payment"
+      ],
+      "needBy": "devMid",
+      "leadDays": 10,
+      "fields": [
+        {
+          "label": "사용 전 취소",
+          "proposal": "전액 환불"
+        },
+        {
+          "label": "사용 후",
+          "proposal": "환불 불가"
+        },
+        {
+          "label": "예외(부분 사용 등)"
+        }
+      ],
+      "mode": "draft",
+      "blocks": "결제 개발",
+      "need": "취소 시점별 환불 기준과 예외(부분 사용, 노쇼)",
+      "proposal": "결제 후 사용 전 전액 환불, 사용 후 환불 불가"
+    },
+    {
+      "id": "ops-policy",
+      "cat": "policy",
+      "title": "회원·혜택 운영 정책",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "membership"
+      ],
+      "needBy": "devMid",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "등급 기준"
+        },
+        {
+          "label": "포인트 적립·소멸"
+        },
+        {
+          "label": "쿠폰 발급 규칙"
+        }
+      ],
+      "need": "등급 기준, 포인트 적립·소멸, 쿠폰 발급 규칙"
+    },
+    {
+      "id": "consent",
+      "cat": "policy",
+      "title": "마케팅 수신 동의 방식",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "marketing"
+      ],
+      "needBy": "devMid",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "마케팅 수신 동의 위치",
+          "proposal": "알림 설정에서 선택 동의"
+        },
+        {
+          "label": "광고성 메시지 발송 계획"
+        }
+      ],
+      "need": "광고성 메시지 동의를 받는 시점과 방법",
+      "proposal": "가입 때는 필수 항목만 고지, 마케팅 수신은 알림 설정에서 선택 동의"
+    },
+    {
+      "id": "age-limit",
+      "cat": "policy",
+      "title": "만 14세 미만 가입",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "devMid",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "만 14세 미만 가입",
+          "proposal": "제한"
+        }
+      ],
+      "need": "만 14세 미만 가입을 받을지",
+      "proposal": "만 14세 미만 가입 제한 (법정대리인 동의 절차를 두지 않음)"
+    },
+    {
+      "id": "location",
+      "cat": "policy",
+      "title": "위치정보 이용 동의",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "location"
+      ],
+      "needBy": "devMid",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "사용 목적"
+        },
+        {
+          "label": "동의 받는 시점"
+        }
+      ],
+      "need": "위치정보 사용 목적과 동의 방식"
+    },
+    {
+      "id": "apple-dev",
+      "cat": "accounts",
+      "title": "Apple Developer 계정(법인)",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "app"
+      ],
+      "needBy": "storeSubmit",
+      "leadDays": 21,
+      "fields": [
+        {
+          "label": "계정 보유(O/X)"
+        },
+        {
+          "label": "D-U-N-S 번호 발급(O/X)"
+        },
+        {
+          "label": "개발사 계정 초대(O/X)"
+        },
+        {
+          "label": "2단계 인증 가능 담당자"
+        }
+      ],
+      "need": "고객사 명의 법인 계정(D-U-N-S 번호 필요, 발급에 2주 이상)",
+      "proposal": "고객사가 가입하고 개발사 계정을 관리자로 초대"
+    },
+    {
+      "id": "play-console",
+      "cat": "accounts",
+      "title": "Google Play Console 계정",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "app"
+      ],
+      "needBy": "storeSubmit",
+      "leadDays": 10,
+      "fields": [
+        {
+          "label": "계정 보유(O/X)"
+        },
+        {
+          "label": "개발자 신원 확인(O/X)"
+        },
+        {
+          "label": "개발사 계정 초대(O/X)"
+        }
+      ],
+      "need": "고객사 명의 계정과 개발자 신원 확인",
+      "proposal": "고객사가 가입하고 개발사 계정을 관리자로 초대"
+    },
+    {
+      "id": "pg-test",
+      "cat": "accounts",
+      "title": "결제(PG) 테스트 키",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "payment"
+      ],
+      "needBy": "devStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "PG사"
+        },
+        {
+          "label": "테스트 키 전달 방법",
+          "proposal": "관리자 권한 초대"
+        }
+      ],
+      "need": "PG사 선택과 테스트 키(개발 시작용)"
+    },
+    {
+      "id": "pg",
+      "cat": "accounts",
+      "title": "결제(PG) 계약·운영 키",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "payment"
+      ],
+      "needBy": "devMid",
+      "leadDays": 28,
+      "fields": [
+        {
+          "label": "계약 상태"
+        },
+        {
+          "label": "라이브 심사 신청일"
+        },
+        {
+          "label": "운영 키 전달 방법",
+          "proposal": "관리자 권한 초대로 개발사가 직접 확인"
+        }
+      ],
+      "blocks": "운영 결제 검증",
+      "need": "PG 계약과 라이브 심사, 운영 키(심사에 2~4주)"
+    },
+    {
+      "id": "sms-sender",
+      "cat": "accounts",
+      "title": "문자 발신번호",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "sms"
+      ],
+      "needBy": "devMid",
+      "leadDays": 10,
+      "fields": [
+        {
+          "label": "발송 서비스"
+        },
+        {
+          "label": "발신번호"
+        },
+        {
+          "label": "서류 인증 완료(O/X)"
+        }
+      ],
+      "need": "발송 서비스 계정과 발신번호 등록(서류 인증)"
+    },
+    {
+      "id": "kakao-channel",
+      "cat": "accounts",
+      "title": "카카오 비즈니스 채널·알림톡 발신프로필",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "alimtalk"
+      ],
+      "needBy": "devMid",
+      "leadDays": 14,
+      "fields": [
+        {
+          "label": "채널 이름"
+        },
+        {
+          "label": "채널 개설(O/X)"
+        },
+        {
+          "label": "발신프로필 심사(O/X)"
+        }
+      ],
+      "need": "카카오 비즈니스 채널 개설과 알림톡 발신프로필 심사"
+    },
+    {
+      "id": "email-domain",
+      "cat": "accounts",
+      "title": "메일 발신 도메인 인증",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "email"
+      ],
+      "needBy": "devMid",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "발신 주소"
+        },
+        {
+          "label": "DNS 설정 가능 담당자"
+        }
+      ],
+      "need": "메일을 보낼 도메인과 DNS 인증(SPF·DKIM) 권한"
+    },
+    {
+      "id": "social-kakao",
+      "cat": "accounts",
+      "title": "카카오 로그인 앱",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "social-kakao"
+      ],
+      "needBy": "devStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "앱 생성(O/X)"
+        },
+        {
+          "label": "개발사 팀원 초대(O/X)"
+        },
+        {
+          "label": "로그인 때 받을 정보",
+          "proposal": "이메일, 닉네임"
+        }
+      ],
+      "need": "Kakao Developers에 고객사 명의 앱",
+      "proposal": "고객사가 앱을 만들고 개발사 계정을 팀원으로 초대"
+    },
+    {
+      "id": "social-naver",
+      "cat": "accounts",
+      "title": "네이버 로그인 앱·검수",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "social-naver"
+      ],
+      "needBy": "devStart",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "앱 생성(O/X)"
+        },
+        {
+          "label": "앱 이름"
+        },
+        {
+          "label": "로그인 때 받을 정보",
+          "proposal": "이메일, 이름"
+        },
+        {
+          "label": "검수 신청(O/X)"
+        }
+      ],
+      "need": "네이버 개발자센터 고객사 명의 앱(운영 전 검수 신청 필요)"
+    },
+    {
+      "id": "social-apple",
+      "cat": "accounts",
+      "title": "Apple 로그인 설정",
+      "ball": "us",
+      "sheet": true,
+      "when": [
+        "social-apple"
+      ],
+      "needBy": "devStart",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "로그인 키 발급(O/X)"
+        }
+      ],
+      "need": "Apple Developer 계정 권한(로그인 키 발급)"
+    },
+    {
+      "id": "social-google",
+      "cat": "accounts",
+      "title": "Google 로그인 설정",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "social-google"
+      ],
+      "needBy": "devStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "프로젝트 생성(O/X)"
+        },
+        {
+          "label": "동의 화면 앱 이름"
+        }
+      ],
+      "need": "Google Cloud 프로젝트(고객사 명의)와 OAuth 동의 화면"
+    },
+    {
+      "id": "push",
+      "cat": "accounts",
+      "title": "앱 푸시 설정",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "push"
+      ],
+      "needBy": "devMid",
+      "leadDays": 3,
+      "fields": [
+        {
+          "label": "Firebase 프로젝트(O/X)"
+        },
+        {
+          "label": "개발사 초대(O/X)"
+        },
+        {
+          "label": "iOS 푸시 키 등록(O/X)"
+        }
+      ],
+      "need": "Firebase 프로젝트와 iOS 푸시 인증 키",
+      "proposal": "계정 권한을 주시면 개발사가 등록"
+    },
+    {
+      "id": "vendor-test",
+      "cat": "accounts",
+      "title": "외부 공급사 테스트 계정",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "vendor"
+      ],
+      "needBy": "devStart",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "공급사"
+        },
+        {
+          "label": "테스트 계정 전달(O/X)"
+        },
+        {
+          "label": "API 문서 위치"
+        }
+      ],
+      "need": "연동할 공급사의 테스트 계정·API 문서"
+    },
+    {
+      "id": "vendor-api",
+      "cat": "accounts",
+      "title": "외부 공급사 운영 계정·키",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "vendor"
+      ],
+      "needBy": "qaStart",
+      "leadDays": 14,
+      "fields": [
+        {
+          "label": "운영 키 전달 일정"
+        },
+        {
+          "label": "콜백 주소 등록 담당"
+        }
+      ],
+      "blocks": "운영 연동 검증",
+      "need": "운영 키 전달 일정과 콜백 주소 등록 담당"
+    },
+    {
+      "id": "brand",
+      "cat": "design",
+      "title": "로고·브랜드 가이드",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "devStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "로고 원본(AI·SVG)"
+        },
+        {
+          "label": "앱 아이콘"
+        },
+        {
+          "label": "메인 컬러"
+        },
+        {
+          "label": "폰트"
+        }
+      ],
+      "need": "로고 원본(AI·SVG), 브랜드 컬러, 폰트"
+    },
+    {
+      "id": "design-files",
+      "cat": "design",
+      "title": "화면 설계(Figma)",
+      "ball": "us",
+      "sheet": false,
+      "when": [],
+      "needBy": "devStart",
+      "leadDays": 10,
+      "fields": []
+    },
+    {
+      "id": "store-assets",
+      "cat": "design",
+      "title": "앱 아이콘·스토어 이미지·설명",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "app"
+      ],
+      "needBy": "storeSubmit",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "앱 이름"
+        },
+        {
+          "label": "짧은 설명"
+        },
+        {
+          "label": "상세 설명"
+        },
+        {
+          "label": "키워드"
+        }
+      ],
+      "need": "앱 이름, 짧은 설명, 아이콘, 스크린샷에 쓸 문구",
+      "proposal": "개발사가 스크린샷을 만들고 설명 초안을 드림"
+    },
+    {
+      "id": "content",
+      "cat": "design",
+      "title": "운영 콘텐츠(공지·FAQ·안내 문구)",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "content",
+        "support"
+      ],
+      "needBy": "qaStart",
+      "leadDays": 10,
+      "fields": [
+        {
+          "label": "공지"
+        },
+        {
+          "label": "FAQ"
+        },
+        {
+          "label": "이용 안내"
+        }
+      ],
+      "need": "출시 때 올릴 공지·FAQ 실제 문구",
+      "proposal": "개발사가 초안을 넣고 고객사가 수정"
+    },
+    {
+      "id": "messages",
+      "cat": "design",
+      "title": "고객 발송 문안(문자·알림톡·메일·푸시)",
+      "ball": "us",
+      "sheet": true,
+      "when": [
+        "sms",
+        "alimtalk",
+        "email",
+        "push"
+      ],
+      "needBy": "qaStart",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "확인 담당자"
+        }
+      ],
+      "mode": "draft",
+      "need": "상황별 발송 문안 확인",
+      "proposal": "개발사가 상황별 문안 초안을 드리고 고객사가 확인"
+    },
+    {
+      "id": "product-data",
+      "cat": "ops",
+      "title": "운영 데이터(상품·가격 등)",
+      "ball": "client",
+      "sheet": true,
+      "when": [
+        "commerce"
+      ],
+      "needBy": "qaStart",
+      "leadDays": 10,
+      "fields": [
+        {
+          "label": "전달 방법",
+          "proposal": "엑셀 양식"
+        },
+        {
+          "label": "전달 일정"
+        }
+      ],
+      "need": "출시 때 올릴 실제 상품·가격 데이터"
+    },
+    {
+      "id": "qa-plan",
+      "cat": "ops",
+      "title": "고객사 QA 계획·테스트 계정",
+      "ball": "us",
+      "sheet": true,
+      "when": [],
+      "needBy": "qaStart",
+      "leadDays": 5,
+      "fields": [
+        {
+          "label": "QA 참여자"
+        },
+        {
+          "label": "QA 기간",
+          "proposal": "{qaStart}~{qaEnd}"
+        }
+      ],
+      "need": "QA 참여자와 기간 확인",
+      "proposal": "개발사가 QA 체크리스트와 테스트 계정을 드리고, 발견한 문제는 요청 DB로 받기"
+    },
+    {
+      "id": "review-account",
+      "cat": "ops",
+      "title": "스토어 심사용 테스트 계정",
+      "ball": "us",
+      "sheet": false,
+      "when": [
+        "app"
+      ],
+      "needBy": "storeSubmit",
+      "leadDays": 3,
+      "fields": []
+    },
+    {
+      "id": "launch-plan",
+      "cat": "ops",
+      "title": "출시 방식·공지",
+      "ball": "us",
+      "sheet": true,
+      "when": [],
+      "needBy": "launch",
+      "leadDays": 7,
+      "fields": [
+        {
+          "label": "출시 방식",
+          "proposal": "심사 통과 뒤 {launch} 수동 출시"
+        },
+        {
+          "label": "공지 일정"
+        }
+      ],
+      "need": "출시 방식과 공지 일정 확인",
+      "proposal": "심사 통과 뒤 정한 날짜에 수동 출시"
+    },
+    {
+      "id": "maintenance",
+      "cat": "ops",
+      "title": "출시 후 유지보수·운영 지원",
+      "ball": "client",
+      "sheet": true,
+      "when": [],
+      "needBy": "launch",
+      "leadDays": 14,
+      "fields": [
+        {
+          "label": "유지보수 계약(O/X)"
+        },
+        {
+          "label": "지원 범위"
+        }
+      ],
+      "need": "하자 보수 이후 유지보수 계약 여부와 범위"
+    }
+  ]
+}
