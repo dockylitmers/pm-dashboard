@@ -1,0 +1,14 @@
+{
+  "name": "pm-dashboard",
+  "description": "외주 개발 프로젝트를 관리하는 PM 시스템 (킥오프 체크리스트, 고객사 요청, SRS, 일정 예측, 대시보드)",
+  "owner": {
+    "name": "litmers-dev"
+  },
+  "plugins": [
+    {
+      "name": "pm-dashboard",
+      "source": "./",
+      "description": "외주 개발 프로젝트 PM 시스템: 킥오프 체크리스트, 고객사 요청서, SRS, 일정 예측, 대시보드"
+    }
+  ]
+}

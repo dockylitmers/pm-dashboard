@@ -1,0 +1,437 @@
+{
+  "id": "demo",
+  "sample": true,
+  "name": "병원 예약 앱",
+  "client": "샘플 고객사",
+  "kind": "신규 킥오프",
+  "summary": "병원 예약 앱(iOS·Android)과 병원용 관리자 웹",
+  "asOf": "2026-10-10",
+  "forecastConfig": {
+    "baselineEnd": "2026-10-23",
+    "epicLabel": "epic",
+    "descopeLabel": "descope"
+  },
+  "dates": {
+    "devStart": "2026-10-26",
+    "devEnd": "2026-12-18",
+    "qaStart": "2026-12-21",
+    "qaEnd": "2027-01-08",
+    "launch": "2027-01-15",
+    "kickoff": "2026-10-12"
+  },
+  "receiveDefault": "notion",
+  "channels": {
+    "notion": {
+      "label": "고객 요청 DB",
+      "url": ""
+    }
+  },
+  "categories": [
+    {
+      "id": "contract",
+      "name": "계약·범위"
+    },
+    {
+      "id": "comms",
+      "name": "소통·운영 방식"
+    },
+    {
+      "id": "policy",
+      "name": "정책·법무"
+    },
+    {
+      "id": "accounts",
+      "name": "계정·외부 연동"
+    },
+    {
+      "id": "design",
+      "name": "브랜드·콘텐츠"
+    },
+    {
+      "id": "ops",
+      "name": "운영·출시"
+    }
+  ],
+  "checklist": [
+    {
+      "id": "contract",
+      "cat": "contract",
+      "title": "계약서·견적서",
+      "status": "confirmed",
+      "ball": "us",
+      "res": {
+        "label": "계약 폴더"
+      },
+      "updated": "2026-10-08",
+      "note": "범위 판단의 1순위 근거"
+    },
+    {
+      "id": "srs",
+      "cat": "contract",
+      "title": "요구사항 명세서(SRS)",
+      "status": "missing",
+      "ball": "us",
+      "helper": "srs",
+      "due": "2026-10-23",
+      "blocks": "개발 착수",
+      "blocksDate": "2026-10-26",
+      "note": "견적 범위와 회의록으로 초안을 만들고 고객 확인을 받는다"
+    },
+    {
+      "id": "schedule",
+      "cat": "contract",
+      "title": "일정 합의(개발·QA·출시)",
+      "status": "requested",
+      "ball": "client",
+      "requested": "2026-10-06",
+      "blocks": "개발 착수",
+      "blocksDate": "2026-10-26",
+      "need": "개발·QA·출시 일정 확인",
+      "proposal": "개발 10/26~12/18, QA 12/21~1/8, 출시 1/15"
+    },
+    {
+      "id": "acceptance",
+      "cat": "contract",
+      "title": "검수 기준·하자 보수 기간",
+      "status": "missing",
+      "ball": "us",
+      "blocks": "고객사 QA",
+      "blocksDate": "2026-12-21",
+      "proposal": "중대 버그 0건, 하자 보수 출시 후 3개월"
+    },
+    {
+      "id": "change-request",
+      "cat": "contract",
+      "title": "변경 요청 절차",
+      "status": "missing",
+      "ball": "us",
+      "blocks": "개발 착수",
+      "blocksDate": "2026-10-26",
+      "proposal": "SRS에 없는 기능은 변경 요청으로 받고 일정·비용 영향을 먼저 알림"
+    },
+    {
+      "id": "contacts",
+      "cat": "comms",
+      "title": "고객사 담당자·결정권자",
+      "status": "missing",
+      "ball": "client",
+      "need": "실무 담당자와 최종 결정권자, 연락 가능 시간",
+      "blocks": "개발 착수",
+      "blocksDate": "2026-10-26"
+    },
+    {
+      "id": "channel",
+      "cat": "comms",
+      "title": "고객 소통 채널(요청 DB)",
+      "status": "missing",
+      "ball": "us",
+      "proposal": "Notion 요청 DB 하나로 요청·답·합의를 남긴다"
+    },
+    {
+      "id": "report",
+      "cat": "comms",
+      "title": "정기 보고(주간 진행상황)",
+      "status": "missing",
+      "ball": "us",
+      "proposal": "매주 월요일 진행상황 카드 + 격주 회의"
+    },
+    {
+      "id": "terms",
+      "cat": "policy",
+      "title": "이용약관",
+      "status": "missing",
+      "ball": "client",
+      "mode": "draft",
+      "blocks": "스토어 심사",
+      "blocksDate": "2027-01-04",
+      "need": "서비스 이용약관 원문",
+      "proposal": "표준 약관 초안을 리트머스가 작성"
+    },
+    {
+      "id": "privacy",
+      "cat": "policy",
+      "title": "개인정보처리방침",
+      "status": "missing",
+      "ball": "client",
+      "mode": "draft",
+      "blocks": "스토어 심사",
+      "blocksDate": "2027-01-04",
+      "need": "수집 항목·보관 기간·위탁사·보호책임자",
+      "proposal": "앱 기능 기준 초안을 리트머스가 작성"
+    },
+    {
+      "id": "refund",
+      "cat": "policy",
+      "title": "취소·환불 정책",
+      "status": "missing",
+      "ball": "client",
+      "mode": "draft",
+      "blocks": "결제 개발",
+      "blocksDate": "2026-11-16",
+      "need": "예약 취소 시점별 환불 비율과 노쇼 처리",
+      "proposal": "진료 24시간 전 전액, 이후 50%, 노쇼 환불 없음"
+    },
+    {
+      "id": "medical-notice",
+      "cat": "policy",
+      "title": "의료 정보 고지 문구",
+      "status": "missing",
+      "ball": "client",
+      "need": "앱이 진료를 대신하지 않는다는 고지 문구 확인"
+    },
+    {
+      "id": "domain",
+      "cat": "accounts",
+      "title": "서비스 도메인",
+      "status": "missing",
+      "ball": "client",
+      "need": "도메인 구매 여부와 DNS 관리 권한"
+    },
+    {
+      "id": "cloud",
+      "cat": "accounts",
+      "title": "클라우드·서버 계정",
+      "status": "missing",
+      "ball": "client",
+      "blocks": "개발 착수",
+      "blocksDate": "2026-10-26",
+      "proposal": "고객사 명의 계정에 리트머스 관리자 초대"
+    },
+    {
+      "id": "apple-dev",
+      "cat": "accounts",
+      "title": "Apple Developer 계정",
+      "status": "missing",
+      "ball": "client",
+      "blocks": "스토어 심사",
+      "blocksDate": "2027-01-04",
+      "need": "고객사 명의 법인 계정(발급에 2주 이상 걸림)"
+    },
+    {
+      "id": "play-console",
+      "cat": "accounts",
+      "title": "Google Play Console 계정",
+      "status": "missing",
+      "ball": "client",
+      "blocks": "스토어 심사",
+      "blocksDate": "2027-01-04",
+      "need": "고객사 명의 계정과 개발자 신원 확인"
+    },
+    {
+      "id": "pg",
+      "cat": "accounts",
+      "title": "결제(PG) 계약",
+      "status": "missing",
+      "ball": "client",
+      "blocks": "결제 개발",
+      "blocksDate": "2026-11-16",
+      "need": "PG사 선택과 계약(심사에 2~4주)"
+    },
+    {
+      "id": "sms",
+      "cat": "accounts",
+      "title": "문자·알림톡 발송 계정",
+      "status": "missing",
+      "ball": "client",
+      "blocks": "예약 알림",
+      "need": "발신번호 등록, 카카오 채널 개설"
+    },
+    {
+      "id": "social-login",
+      "cat": "accounts",
+      "title": "소셜 로그인 앱(카카오·네이버·Apple)",
+      "status": "not_needed",
+      "ball": "us",
+      "note": "휴대폰 인증 로그인만 사용하기로 함"
+    },
+    {
+      "id": "brand",
+      "cat": "design",
+      "title": "로고·브랜드 가이드",
+      "status": "requested",
+      "ball": "client",
+      "requested": "2026-10-07",
+      "need": "로고 원본(AI·SVG), 브랜드 컬러, 폰트"
+    },
+    {
+      "id": "figma",
+      "cat": "design",
+      "title": "화면 설계(Figma)",
+      "status": "missing",
+      "ball": "us",
+      "blocks": "개발 착수",
+      "blocksDate": "2026-10-26",
+      "proposal": "리트머스 디자이너가 와이어프레임부터 작성"
+    },
+    {
+      "id": "store-assets",
+      "cat": "design",
+      "title": "앱 아이콘·스토어 이미지·설명",
+      "status": "missing",
+      "ball": "client",
+      "blocks": "스토어 심사",
+      "blocksDate": "2027-01-04"
+    },
+    {
+      "id": "cs",
+      "cat": "ops",
+      "title": "고객센터 운영 시간·연락처",
+      "status": "missing",
+      "ball": "client",
+      "proposal": "평일 09~18시"
+    },
+    {
+      "id": "admin",
+      "cat": "ops",
+      "title": "관리자 계정·권한",
+      "status": "missing",
+      "ball": "client",
+      "need": "병원 관리자 계정 수와 권한 단계"
+    },
+    {
+      "id": "test-account",
+      "cat": "ops",
+      "title": "QA·심사용 테스트 계정",
+      "status": "missing",
+      "ball": "us",
+      "blocks": "스토어 심사",
+      "blocksDate": "2027-01-04"
+    }
+  ],
+  "decisions": [
+    {
+      "title": "로그인 방식",
+      "recommend": "휴대폰 인증 로그인만 (소셜 로그인은 2차)",
+      "due": "킥오프 회의"
+    }
+  ],
+  "risks": [
+    {
+      "title": "스토어 계정 발급 지연",
+      "level": "mid",
+      "detail": "Apple 법인 계정은 발급에 2주 이상 걸림",
+      "mitigation": "킥오프 주에 고객사 명의로 신청 요청"
+    }
+  ],
+  "srs": {
+    "exists": false,
+    "platforms": [
+      "app",
+      "admin",
+      "server"
+    ],
+    "roles": [
+      "환자(회원)",
+      "보호자",
+      "병원 관리자",
+      "리트머스 운영자"
+    ],
+    "featureSource": "예약 앱 표준 기능 묶음 (제안)",
+    "features": [
+      {
+        "id": "auth",
+        "name": "회원가입·로그인",
+        "desc": "휴대폰 인증, 보호자 연결",
+        "status": "prop"
+      },
+      {
+        "id": "search",
+        "name": "병원·진료과 찾기",
+        "desc": "지역·진료과 검색, 병원 상세",
+        "status": "prop"
+      },
+      {
+        "id": "booking",
+        "name": "예약 신청·변경·취소",
+        "desc": "시간대 선택, 대기 순번",
+        "status": "prop"
+      },
+      {
+        "id": "payment",
+        "name": "예약금 결제·환불",
+        "desc": "PG 결제, 취소 시점별 환불",
+        "status": "ask"
+      },
+      {
+        "id": "notify",
+        "name": "예약 알림",
+        "desc": "알림톡·앱 푸시 리마인드",
+        "status": "prop"
+      },
+      {
+        "id": "review",
+        "name": "진료 후기",
+        "desc": "별점·후기, 신고",
+        "status": "ask"
+      },
+      {
+        "id": "admin-booking",
+        "name": "관리자 예약 관리",
+        "desc": "시간표, 예약 승인·취소, 노쇼 처리",
+        "status": "prop"
+      },
+      {
+        "id": "admin-stats",
+        "name": "관리자 통계",
+        "desc": "예약·매출·노쇼율",
+        "status": "prop"
+      }
+    ]
+  },
+  "resources": [
+    {
+      "id": "github",
+      "name": "GitHub 저장소·이슈",
+      "glyph": "GH",
+      "desc": "킥오프 뒤 저장소를 만들고 연결",
+      "url": ""
+    },
+    {
+      "id": "requests",
+      "name": "고객 요청 DB",
+      "glyph": "N",
+      "desc": "고객 소통 원본",
+      "url": ""
+    },
+    {
+      "id": "contract",
+      "name": "계약 문서",
+      "glyph": "C",
+      "desc": "계약서·견적서",
+      "url": ""
+    },
+    {
+      "id": "figma",
+      "name": "화면 설계",
+      "glyph": "F",
+      "desc": "Figma 파일",
+      "url": ""
+    }
+  ],
+  "phases": [
+    {
+      "name": "킥오프·준비",
+      "kind": "kickoff",
+      "start": "2026-10-12",
+      "end": "2026-10-23"
+    },
+    {
+      "name": "개발",
+      "kind": "dev",
+      "start": "2026-10-26",
+      "end": "2026-12-18"
+    },
+    {
+      "name": "고객사 QA",
+      "kind": "qa",
+      "start": "2026-12-21",
+      "end": "2027-01-08"
+    },
+    {
+      "name": "스토어 심사",
+      "kind": "review",
+      "start": "2027-01-04",
+      "end": "2027-01-13"
+    }
+  ]
+}

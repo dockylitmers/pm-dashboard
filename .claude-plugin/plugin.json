@@ -1,0 +1,8 @@
+{
+  "name": "pm-dashboard",
+  "version": "0.1.0",
+  "description": "외주 개발 프로젝트 PM 시스템: 킥오프 체크리스트, 고객사 요청서·리마인드, SRS, GitHub 기반 일정 예측, 대시보드와 에이전트 캐릭터 리미",
+  "author": { "name": "litmers-dev" },
+  "repository": "https://github.com/litmers-dev/pm-dashboard",
+  "keywords": ["pm", "outsourcing", "kickoff", "srs", "forecast", "dashboard"]
+}

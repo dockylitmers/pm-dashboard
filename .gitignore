@@ -1,0 +1,6 @@
+.DS_Store
+node_modules/
+*.tmp
+# 프로젝트 데이터는 이 저장소에 두지 않는다 (~/.pm-dashboard)
+.pm-dashboard/
+build/
