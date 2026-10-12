@@ -167,8 +167,14 @@ export function scheduleStatus(w) {
     const mins = [...text.matchAll(/<key>Minute<\/key>\s*<integer>(\d+)/g)].map((m) => Number(m[1]));
     times = hours.map((h, i) => hm({ Hour: h, Minute: mins[i] ?? 0 }));
   }
+  // 이 PC의 자동 실행은 하나다. 등록된 워크스페이스가 지금 것과 다르면 알려 준다
+  const target = installed ? fs.readFileSync(plistPath(UPDATE_LABEL), "utf8").match(/<string>--workspace<\/string>\s*<string>([^<]+)<\/string>/)?.[1] || null : null;
+  const decode = (v) => v?.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  const workspace = decode(target);
   return {
     installed,
+    workspace,
+    otherWorkspace: !!workspace && workspace !== w.dir,
     times,
     loaded: installed ? loaded(UPDATE_LABEL) : false,
     serve: servePlist ? { port: config?.serve?.port || 4477, loaded: loaded(SERVE_LABEL) } : null,

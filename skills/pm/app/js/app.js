@@ -2062,7 +2062,7 @@
       if (!response.ok) return null;
       const data = await response.json();
       upd.running = data.running;
-      upd.schedule = data.schedule?.installed ? { times: data.schedule.times, loaded: data.schedule.loaded } : null;
+      upd.schedule = data.schedule?.installed && !data.schedule.otherWorkspace ? { times: data.schedule.times, loaded: data.schedule.loaded } : null;
       for (const [id, last] of Object.entries(data.last || {})) if (last) upd.last[id] = { ...(upd.last[id] || {}), last };
       return data;
     } catch {

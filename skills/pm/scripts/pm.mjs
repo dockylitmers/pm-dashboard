@@ -41,7 +41,7 @@ commands.help = () => {
 
 프로젝트
   init <id> --name 이름 --client 고객사 [--repo owner/repo] [--scope app,admin,payment,...]
-            [--kickoff D] [--dev-start D] [--dev-end D] [--qa-start D] [--qa-end D] [--launch D]
+            [--kickoff D] [--dev-start D] [--dev-end D] [--qa-start D] [--qa-end D] [--store-submit D] [--launch D]
             [--from sample]       새 프로젝트 (범위로 체크리스트·요청 목록이 정해진다)
   scope [--list] [--set a,b] [--add a] [--remove b]   개발 범위(플랫폼·기능) 보기·바꾸기
   projects                        등록된 프로젝트
@@ -591,7 +591,7 @@ commands.refresh = async (args) => {
   section(`${Core.STALE_DAYS}일 넘게 확인 안 함`, by("stale"), ({ item }) => when(item));
   const bySource = new Map();
   for (const { item } of r.picked) {
-    const key = item.res?.label || "출처 없음";
+    const key = item.res?.label || item.checkedSrc || "출처 없음";
     if (!bySource.has(key)) bySource.set(key, { url: item.res?.url, ids: [] });
     bySource.get(key).ids.push(item.id);
   }
@@ -641,7 +641,8 @@ commands.schedule = (args) => {
   if (sub === "remove") return console.log(scheduleRemove(w).join("\n"));
   if (sub !== "status") throw new UsageError("pm schedule [status | install [--times 08:30,12:30,18:30] [--no-serve] | remove]");
   const st = scheduleStatus(w);
-  console.log(st.installed ? `자동 업데이트: 매일 ${st.times.join(" · ")} (${st.loaded ? "켜짐" : "등록됐지만 꺼짐"})` : "자동 업데이트: 꺼짐 — pm schedule install");
+  if (st.otherWorkspace) console.log(`자동 업데이트: 이 PC에서는 다른 워크스페이스(${st.workspace})에 켜져 있습니다. 여기로 옮기려면 이 워크스페이스에서 pm schedule install`);
+  else console.log(st.installed ? `자동 업데이트: 매일 ${st.times.join(" · ")} (${st.loaded ? "켜짐" : "등록됐지만 꺼짐"})` : "자동 업데이트: 꺼짐 — pm schedule install");
   if (st.serve) console.log(`대시보드 서버: http://127.0.0.1:${st.serve.port}/ (${st.serve.loaded ? "켜짐" : "등록됐지만 꺼짐"})`);
   if (st.log) console.log(`기록: ${st.log}`);
   const busy = runningUpdate(w);

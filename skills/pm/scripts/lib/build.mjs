@@ -31,5 +31,11 @@ export function dashboardHtml(ws, { ids, server = false, client = false }) {
   const data = `<script>window.PM_MODE=${scriptJson(mode)};window.PM_LIBRARY=${scriptJson({ features: lib.features, categories: lib.categories })};window.PM_PROJECTS=${scriptJson(projects)};window.PM_GITHUB=${scriptJson(github)};window.PM_UPDATES=${scriptJson(updates)};</script>`;
   const scripts = [data, ...SCRIPTS.map((file) => `<script>\n${fs.readFileSync(path.join(APP_DIR, "js", file), "utf8")}\n</script>`)].join("\n");
   // replace의 두 번째 인자에 문자열을 주면 $& 같은 패턴이 해석되므로 함수로 넘긴다
-  return fs.readFileSync(path.join(APP_DIR, "index.html"), "utf8").replace("<!-- PM:SCRIPTS -->", () => scripts);
+  // 탭 제목은 워크스페이스의 회사 이름을 따른다
+  const company = String(ws.config.company || "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+  const title = client ? `${company} 개발 관련 요청사항` : `${company} PM 대시보드`;
+  return fs
+    .readFileSync(path.join(APP_DIR, "index.html"), "utf8")
+    .replace("<title>PM 대시보드</title>", () => `<title>${title.trim()}</title>`)
+    .replace("<!-- PM:SCRIPTS -->", () => scripts);
 }

@@ -63,7 +63,7 @@ export function serve(ws, { port = 4477, open = false } = {}) {
     try {
       if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html"))
         return send(res, 200, dashboardHtml(ws, { ids: ws.ids(), server: true }), "text/html; charset=utf-8");
-      if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { claude: !!process.env.ANTHROPIC_API_KEY, company: ws.config.company });
+      if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { claude: !!process.env.ANTHROPIC_API_KEY, company: ws.config.company, workspace: ws.dir, app: "pm-dashboard" });
 
       if (req.method !== "GET") {
         const origin = req.headers.origin;
@@ -177,6 +177,26 @@ export function serve(ws, { port = 4477, open = false } = {}) {
     }
   });
 
+  // 포트를 이미 쓰고 있으면: 같은 워크스페이스의 pm 대시보드 서버(예: pm schedule이 켜 둔 것)면 그것을 연다
+  server.on("error", async (error) => {
+    if (error.code !== "EADDRINUSE") throw error;
+    const address = `http://${host}:${port}/`;
+    let other = null;
+    try {
+      other = await (await fetch(`${address}api/config`)).json();
+    } catch {}
+    if (other?.app === "pm-dashboard" && other.workspace === ws.dir) {
+      console.log(`이미 켜져 있는 대시보드 서버가 있습니다: ${address}`);
+      if (open) openFile(address);
+      return;
+    }
+    console.error(
+      other?.app === "pm-dashboard"
+        ? `${port} 포트에서 다른 워크스페이스(${other.workspace})의 대시보드가 켜져 있습니다. --port로 다른 포트를 쓰세요.`
+        : `${port} 포트를 다른 프로그램이 쓰고 있습니다. --port로 다른 포트를 쓰세요.`,
+    );
+    process.exitCode = 1;
+  });
   server.listen(port, host, () => {
     const address = `http://${host}:${port}/`;
     console.log(`PM 대시보드 ${address} (끄려면 Ctrl+C)`);
