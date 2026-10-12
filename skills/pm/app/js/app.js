@@ -133,7 +133,8 @@
     `<span class="chip ${meta.cls}">${icon(meta.icon)}${esc(text ?? meta.label)}</span>`;
 
   // ---------------------------------------------------------------- 모델
-  const projectIds = Object.keys(PROJECTS);
+  // 실제 프로젝트를 먼저, 샘플은 뒤에
+  const projectIds = Object.keys(PROJECTS).sort((a, b) => Number(!!PROJECTS[a].sample) - Number(!!PROJECTS[b].sample));
   const state = {
     projectId: projectIds.includes(store.project)
       ? store.project
