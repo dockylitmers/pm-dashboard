@@ -140,6 +140,9 @@ export class Workspace {
 const GITIGNORE = `# pm-dashboard 워크스페이스
 build/
 projects/*/github.json
+projects/*/update.json
+.pm-logs/
+.pm-update.lock
 *.tmp
 .DS_Store
 `;
@@ -177,7 +180,14 @@ export function setup(dir, { company, importFrom } = {}) {
   const existed = fs.existsSync(marker);
   const current = existed ? readJson(marker) : { version: 1, createdAt: new Date().toISOString() };
   writeJson(marker, { ...current, company: company || current.company || "우리 회사" });
-  if (!fs.existsSync(path.join(dir, ".gitignore"))) fs.writeFileSync(path.join(dir, ".gitignore"), GITIGNORE);
+  const ignore = path.join(dir, ".gitignore");
+  if (!fs.existsSync(ignore)) fs.writeFileSync(ignore, GITIGNORE);
+  else {
+    // 새 버전에서 늘어난 제외 항목만 덧붙인다
+    const have = new Set(fs.readFileSync(ignore, "utf8").split("\n").map((l) => l.trim()));
+    const missing = GITIGNORE.split("\n").filter((l) => l && !l.startsWith("#") && !have.has(l));
+    if (missing.length) fs.appendFileSync(ignore, `${fs.readFileSync(ignore, "utf8").endsWith("\n") ? "" : "\n"}${missing.join("\n")}\n`);
+  }
   const readme = path.join(dir, "README.md");
   if (!fs.existsSync(readme) || fs.readFileSync(readme, "utf8").trim().split("\n").length <= 3) fs.writeFileSync(readme, README(company || current.company || "우리 회사"));
   const keep = path.join(dir, "projects", ".gitkeep");

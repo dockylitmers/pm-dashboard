@@ -10,27 +10,16 @@ import os from "node:os";
 import path from "node:path";
 import { BALLS, Core, DATE_RE, Docs, F, fmt, gitRemoteRepo, ID_RE, list, openFile, pad, parseArgs, parseDate, SKILL_DIR, today, UsageError } from "./lib/common.mjs";
 import { dashboardHtml } from "./lib/build.mjs";
-import { issueStates, setupRepo, sync } from "./lib/github.mjs";
+import { setupRepo, sync } from "./lib/github.mjs";
 import { applyScope, library, newProject } from "./lib/library.mjs";
 import { markSent, serve } from "./lib/server.mjs";
+import { scheduleInstall, scheduleRemove, scheduleStatus } from "./lib/schedule.mjs";
+import { buildModel, readUpdate, refreshReport, runUpdate, runningUpdate } from "./lib/update.mjs";
 import { locate, registered, setup, Workspace } from "./lib/workspace.mjs";
 
 const commands = {};
 const ws = (args) => Workspace.open(args);
 
-// 예측까지 계산한 모델. 스냅샷이 없으면 forecast는 null
-function buildModel(w, id, scenario) {
-  const project = Core.normalize(w.load(id), today());
-  let forecast = null;
-  const gh = project.github ? w.github(id) : null;
-  if (gh) {
-    const issues = F.normalizeIssues(gh.issues);
-    forecast = F.compute({ issues, milestones: gh.milestones, now: new Date(gh.syncedAt).getTime(), config: project.forecastConfig, scenario: scenario || {} });
-    forecast.syncedAt = gh.syncedAt;
-    forecast.issues = issues;
-  }
-  return Core.model(project, { forecast, queue: project.queue || [], today: today() });
-}
 const target = (args) => {
   const w = ws(args);
   return { w, id: w.resolveId(args, gitRemoteRepo()) };
@@ -62,6 +51,11 @@ commands.help = () => {
   refresh [--json] [--offline]    다시 확인할 값: 추정 · ${Core.STALE_DAYS}일 넘게 확인 안 함 · 확인 뒤 GitHub 이슈가 바뀜
   check <item...> --src 출처 [--guess] [--note 메모]
                                   값을 원본에서 확인함으로 기록(값이 그대로일 때). --guess는 추정으로 표시
+  update [--all] [--offline]      GitHub 이슈 스냅샷 + 다시 확인할 값 계산, 결과를 대시보드에 표시
+  schedule [status]               자동 업데이트 상태와 프로젝트별 마지막 업데이트
+  schedule install [--times 08:30,12:30,18:30] [--no-serve]
+                                  매일 정해진 시각에 pm update --all (macOS). 대시보드 서버도 계속 켜 둔다
+  schedule remove                 자동 업데이트·서버 끄기
 
 킥오프·현황
   status [--json]                 브리핑·킥오프 단계·예측·고객사 대기
@@ -80,7 +74,7 @@ commands.help = () => {
                                   항목 하나의 요청서·리마인드 초안 (보내지 않음)
   list [--status s] [--ball client|us|dev] [--cat c] [--recheck] [--json]
   set <item> [--status s] [--ball b] [--requested today|D] [--due D] [--res-label t] [--res-url u] [--log 기록]
-             [--src 출처] [--guess]
+             [--src 출처] [--guess] [--note 결론] [--internal 내부 메모]
 
 계약
   contract                        계약 점검·대금 단계 보기
@@ -492,7 +486,7 @@ commands.set = (args) => {
   if (args.requested) item.requested = parseDate(args.requested, "requested");
   if (args.due) item.due = parseDate(args.due, "due");
   if (args["res-label"] || args["res-url"]) item.res = { label: args["res-label"] || item.res?.label || args["res-url"], url: args["res-url"] || item.res?.url || "" };
-  for (const field of ["note", "need", "proposal"]) if (typeof args[field] === "string") item[field] = args[field];
+  for (const field of ["note", "need", "proposal", "internal"]) if (typeof args[field] === "string") item[field] = args[field];
   if (typeof args.src === "string" || args.guess) item.checked = checkedMark(args, "PM 확인");
   item.updated = today();
   const changes = [];
@@ -553,41 +547,11 @@ commands.check = (args) => {
   console.log(`${ids.join(", ")}: ${args.guess ? "추정" : "확인"} ${F.shortDate(today())} · ${args.src.trim()}`);
 };
 
-// 항목에 적힌 GitHub 이슈(링크, #번호). 같은 저장소의 #번호만 짧은 형식으로 읽는다
-function issueRefs(item, repo) {
-  const refs = new Map();
-  const text = [item.res?.url, item.res?.label, item.note, item.internal].filter(Boolean).join(" ");
-  for (const m of text.matchAll(/github\.com\/([\w.-]+\/[\w.-]+)\/(?:issues|pull)\/(\d+)/g)) refs.set(`${m[1]}#${m[2]}`, { repo: m[1], n: Number(m[2]) });
-  if (repo) for (const m of text.matchAll(/(?<![\w/&#])#(\d{1,6})\b/g)) if (![...refs.values()].some((r) => r.n === Number(m[1]))) refs.set(`${repo}#${m[1]}`, { repo, n: Number(m[1]) });
-  return [...refs.values()];
-}
-
 commands.refresh = async (args) => {
   const { w, id } = target(args);
-  const m = buildModel(w, id);
-  const repo = m.project.github?.repo || null;
-  const open = m.checklist.filter((i) => i.status !== "not_needed");
-  const refsByItem = new Map(open.map((i) => [i.id, issueRefs(i, repo)]));
-  let states = new Map();
-  let githubNote = null;
-  const allRefs = [...new Map([...refsByItem.values()].flat().map((r) => [`${r.repo}#${r.n}`, r])).values()];
-  if (args.offline) githubNote = "GitHub 확인 안 함(--offline)";
-  else if (allRefs.length) {
-    try {
-      states = await issueStates(allRefs);
-    } catch (error) {
-      githubNote = `GitHub 확인 못 함: ${error.message}`;
-    }
-  }
-  const rows = open.map((item) => {
-    const changed = refsByItem
-      .get(item.id)
-      .map((r) => ({ ...r, ...(states.get(`${r.repo}#${r.n}`) || {}) }))
-      .filter((r) => r.updated && (!item.checkedAt || r.updated > item.checkedAt));
-    return { item, changed };
-  });
-  const picked = rows.filter(({ item, changed }) => item.recheck || changed.length);
-  const label = (r) => `${r.repo === repo ? "" : r.repo}#${r.n} ${r.state === "closed" ? `닫힘${r.closed ? ` ${F.monthDay(r.closed)}` : ""}` : `갱신 ${F.monthDay(r.updated)}`}`;
+  const r = await refreshReport(w, id, { offline: !!args.offline });
+  const m = r.model;
+  const label = (x) => `${x.repo === r.repo ? "" : x.repo}#${x.n} ${x.state === "closed" ? `닫힘${x.closed ? ` ${F.monthDay(x.closed)}` : ""}` : `갱신 ${F.monthDay(x.updated)}`}`;
   if (args.json)
     return console.log(
       JSON.stringify(
@@ -595,8 +559,8 @@ commands.refresh = async (args) => {
           project: id,
           today: m.today,
           staleDays: Core.STALE_DAYS,
-          github: githubNote || (allRefs.length ? `이슈 ${allRefs.length}개 확인` : "연결된 이슈 없음"),
-          items: picked.map(({ item, changed }) => ({
+          github: r.githubNote,
+          items: r.picked.map(({ item, changed }) => ({
             id: item.id,
             title: item.title,
             status: item.status,
@@ -605,30 +569,28 @@ commands.refresh = async (args) => {
             guess: item.guess,
             stale: item.stale,
             source: item.res || null,
-            github: changed.map((r) => ({ ref: `${r.repo}#${r.n}`, state: r.state, reason: r.reason, updated: r.updated, closed: r.closed, title: r.title })),
+            github: changed.map((x) => ({ ref: `${x.repo}#${x.n}`, state: x.state, reason: x.reason, updated: x.updated, closed: x.closed, title: x.title })),
           })),
         },
         null,
         2,
       ),
     );
-  const guess = picked.filter(({ item }) => item.guess);
-  const moved = picked.filter(({ item, changed }) => !item.guess && changed.length);
-  const stale = picked.filter(({ item, changed }) => !item.guess && !changed.length);
+  const by = (kind) => r.picked.filter((row) => r.kind(row) === kind);
   console.log(`${m.project.name} 최신화 점검 (${F.shortDate(m.today)})`);
-  console.log(`다시 확인할 값 ${picked.length}개 — 추정 ${guess.length} · 확인 뒤 GitHub 이슈가 바뀜 ${moved.length} · ${Core.STALE_DAYS}일 넘게 확인 안 함 ${stale.length}`);
-  if (githubNote) console.log(`(${githubNote})`);
+  console.log(`다시 확인할 값 ${r.counts.total}개 — 추정 ${r.counts.guess} · 확인 뒤 GitHub 이슈가 바뀜 ${r.counts.moved} · ${Core.STALE_DAYS}일 넘게 확인 안 함 ${r.counts.stale}`);
+  console.log(`(${r.githubNote})`);
   const when = (item) => (item.checkedAt ? `확인 ${F.monthDay(item.checkedAt)}${item.checkedSrc ? ` · ${item.checkedSrc}` : ""}` : "확인 기록 없음");
   const section = (title, list, extra) => {
     if (!list.length) return;
     console.log(`\n${title}`);
     for (const row of list) console.log(`  ${pad(row.item.id, 18)}${pad(Core.STATUS[row.item.status].label, 10)}${row.item.title} — ${extra(row)}`);
   };
-  section("추정 값 (담당자에게 확인)", guess, ({ item }) => `${item.note || when(item)}`);
-  section("확인 뒤 GitHub 이슈가 바뀐 항목", moved, ({ item, changed }) => `${changed.map(label).join(", ")} (${when(item)})`);
-  section(`${Core.STALE_DAYS}일 넘게 확인 안 함`, stale, ({ item }) => when(item));
+  section("추정 값 (담당자에게 확인)", by("guess"), ({ item }) => `${item.note || when(item)}`);
+  section("확인 뒤 GitHub 이슈가 바뀐 항목", by("moved"), ({ item, changed }) => `${changed.map(label).join(", ")} (${when(item)})`);
+  section(`${Core.STALE_DAYS}일 넘게 확인 안 함`, by("stale"), ({ item }) => when(item));
   const bySource = new Map();
-  for (const { item } of picked) {
+  for (const { item } of r.picked) {
     const key = item.res?.label || "출처 없음";
     if (!bySource.has(key)) bySource.set(key, { url: item.res?.url, ids: [] });
     bySource.get(key).ids.push(item.id);
@@ -638,10 +600,56 @@ commands.refresh = async (args) => {
     for (const [key, v] of [...bySource.entries()].sort((a, b) => b[1].ids.length - a[1].ids.length)) console.log(`  ${key}${v.url ? ` (${v.url})` : ""}: ${v.ids.join(", ")}`);
   }
   console.log(
-    picked.length
+    r.picked.length
       ? "\n확인한 뒤: 값이 바뀌었으면 pm answer <item> \"라벨=값\" --src 출처, 그대로면 pm check <item...> --src 출처. 원본에서 못 찾은 값은 '없음'으로 두지 말고 --guess로 표시하고 담당자에게 묻는다."
       : "\n다시 확인할 값이 없습니다.",
   );
+};
+
+// 기록 시각은 ISO(UTC)로 두고, 보여 줄 때는 이 컴퓨터의 시각으로
+const localTime = (iso) => {
+  const d = new Date(iso);
+  const two = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
+};
+
+commands.update = async (args) => {
+  const w = ws(args);
+  const ids = args.all || !w.ids().length ? w.ids() : [w.resolveId(args, gitRemoteRepo())];
+  if (!ids.length) throw new UsageError("등록된 프로젝트가 없습니다. pm init <id>로 만드세요.");
+  const trigger = ["schedule", "dashboard", "manual"].includes(args.trigger) ? args.trigger : "manual";
+  const stamp = () => localTime(new Date().toISOString());
+  const { busy, results } = await runUpdate(w, ids, { trigger, offline: !!args.offline, log: (line) => console.error(`[${stamp()}] ${line}`) });
+  if (busy) return console.log(`이미 업데이트 중입니다 (${busy.trigger}, ${busy.at} 시작). 끝난 뒤 다시 하세요.`);
+  if (args.json) return console.log(JSON.stringify(results, null, 2));
+  for (const r of results) {
+    console.log(`${r.id}: ${r.ok ? "업데이트함" : "일부 실패"} · ${r.durationSec}초 · ${r.summary}`);
+    for (const s of r.steps) console.log(`  ${s.ok ? "✓" : "✗"} ${s.name}: ${s.detail}`);
+  }
+  if (results.some((r) => r.recheck.total)) console.log("\n바뀐 값을 반영하려면 Claude에게 \"최신화해 줘\" (pm refresh 목록을 원본과 대조해 기록한다)");
+};
+
+commands.schedule = (args) => {
+  const w = ws(args);
+  const [sub = "status"] = args._;
+  if (sub === "install") {
+    const times = list(args.times || "08:30,12:30,18:30");
+    const result = scheduleInstall(w, { times, serve: args.serve !== "false" && !args["no-serve"], port: Number(args.port) || 4477 });
+    for (const line of result.lines) console.log(line);
+    return;
+  }
+  if (sub === "remove") return console.log(scheduleRemove(w).join("\n"));
+  if (sub !== "status") throw new UsageError("pm schedule [status | install [--times 08:30,12:30,18:30] [--no-serve] | remove]");
+  const st = scheduleStatus(w);
+  console.log(st.installed ? `자동 업데이트: 매일 ${st.times.join(" · ")} (${st.loaded ? "켜짐" : "등록됐지만 꺼짐"})` : "자동 업데이트: 꺼짐 — pm schedule install");
+  if (st.serve) console.log(`대시보드 서버: http://127.0.0.1:${st.serve.port}/ (${st.serve.loaded ? "켜짐" : "등록됐지만 꺼짐"})`);
+  if (st.log) console.log(`기록: ${st.log}`);
+  const busy = runningUpdate(w);
+  if (busy) console.log(`지금 업데이트 중 (${busy.at} 시작)`);
+  for (const id of w.ids()) {
+    const u = readUpdate(w, id)?.last;
+    console.log(`  ${pad(id, 22)}${u ? `${localTime(u.at)} · ${u.trigger === "schedule" ? "자동" : "수동"} · ${u.ok ? "" : "일부 실패 · "}${u.summary}` : "업데이트 기록 없음"}`);
+  }
 };
 
 // ---------------------------------------------------------------- 계약

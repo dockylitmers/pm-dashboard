@@ -95,6 +95,12 @@ review.status: `unchecked`·`ok`·`risk`·`missing`·`na`. payments.status: `pla
 
 `pm sync`가 만든다. 직접 고치지 않는다. `{ repo, syncedAt, milestones: [{ number, title, state, due, open, closed }], issues: [{ n, t, s, r, c, x, m, l, a }] }`.
 
+## update.json
+
+`pm update`(대시보드 버튼, 자동 실행 포함)가 만든다. git에 올리지 않는다. `{ last: { at, trigger(manual·dashboard·schedule), ok, durationSec, steps: [{ name, ok, detail }], recheck: { total, guess, moved, stale }, recheckItems: [{ id, title, kind, github }], summary, error }, history: [{ at, trigger, ok, summary }] }` (기록은 30개까지).
+
+자동 실행 설정은 `pm-workspace.json`의 `schedule`(`{ times, serve, installedAt }`)에 남는다.
+
 ## templates/
 
 | 파일 | 내용 |

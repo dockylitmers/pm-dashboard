@@ -2,9 +2,14 @@
  * pm serve: 대시보드를 로컬에서 띄우고, 화면에서 바꾼 상태를 project.json에 저장한다.
  * 127.0.0.1에만 열고, 쓰기는 같은 출처의 JSON 요청만 받는다(다른 사이트가 로컬 서버에 쓰지 못하게).
  */
+import { spawn } from "node:child_process";
+import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
 import { BALLS, Core, DATE_RE, openFile, today, UsageError } from "./common.mjs";
 import { dashboardHtml } from "./build.mjs";
+import { scheduleStatus } from "./schedule.mjs";
+import { logDir, PM_SCRIPT, readUpdate, runningUpdate } from "./update.mjs";
 
 const ITEM_FIELDS = ["status", "ball", "res", "requested", "due", "updated", "receiveAt", "mode", "note", "answer", "answeredAt"];
 
@@ -64,6 +69,23 @@ export function serve(ws, { port = 4477, open = false } = {}) {
         const origin = req.headers.origin;
         if (origin && !origins.has(origin)) return send(res, 403, { error: "origin" });
         if (req.method !== "DELETE" && !String(req.headers["content-type"] || "").startsWith("application/json")) return send(res, 415, { error: "json only" });
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/update") {
+        const last = Object.fromEntries(ws.ids().map((id) => [id, readUpdate(ws, id)?.last || null]));
+        return send(res, 200, { running: runningUpdate(ws), last, schedule: scheduleStatus(ws) });
+      }
+      // 업데이트는 별도 프로세스로 돌린다(몇 초~수십 초). 화면은 /api/update를 보며 끝나면 새로 고친다
+      if (req.method === "POST" && url.pathname === "/api/update") {
+        if (runningUpdate(ws)) return send(res, 409, { error: "busy", running: runningUpdate(ws) });
+        const { project } = await readBody(req);
+        const target = typeof project === "string" && ws.ids().includes(project) ? ["--project", project] : ["--all"];
+        fs.mkdirSync(logDir(ws), { recursive: true });
+        const out = fs.openSync(path.join(logDir(ws), "update.log"), "a");
+        const child = spawn(process.execPath, [PM_SCRIPT, "update", ...target, "--trigger", "dashboard", "--workspace", ws.dir], { cwd: ws.dir, detached: true, stdio: ["ignore", out, out] });
+        child.unref();
+        fs.closeSync(out);
+        return send(res, 202, { started: true });
       }
 
       if (req.method === "POST" && url.pathname === "/api/claude") {

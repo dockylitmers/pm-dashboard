@@ -181,6 +181,12 @@
   }
   .client-name { color: var(--ink-3); font-size: 13px; }
   .topbar-spacer { flex: 1; }
+  #update-btn.stale #update-label { color: var(--warn-ink); }
+  #update-btn.running svg.icon { animation: pm-spin 1s linear infinite; }
+  @keyframes pm-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { #update-btn.running svg.icon { animation: none; } }
+  .update-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+  .update-steps li { display: flex; gap: 8px; align-items: baseline; }
   .meta-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); padding: 4px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); white-space: nowrap; }
   .tool-btn {
     display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
@@ -567,7 +573,7 @@
   .client-banner { display: none; }
   body.client-view .client-banner { display: flex; }
   body.client-only #client-view-btn, body.client-only .client-banner { display: none; }
-  body.no-projects .project-switch, body.no-projects #dday, body.no-projects #health-chip, body.no-projects #queue-btn, body.no-projects #client-view-btn, body.no-projects .limi-fab, body.no-projects .nav-btn, body.no-projects .nav-label { display: none; }
+  body.no-projects .project-switch, body.no-projects #dday, body.no-projects #health-chip, body.no-projects #queue-btn, body.no-projects #update-btn, body.no-projects #client-view-btn, body.no-projects .limi-fab, body.no-projects .nav-btn, body.no-projects .nav-label { display: none; }
   body.client-view .client-span { grid-column: span 6; }
 
   /* ---------- 반응형 ---------- */
@@ -647,6 +653,7 @@
       <span id="health-chip" data-internal></span>
       <span class="meta-pill num" id="dday"></span>
       <span class="topbar-spacer"></span>
+      <button type="button" class="tool-btn" id="update-btn" data-internal title="원본을 다시 읽어 대시보드를 최신으로"><span data-icon="refresh"></span><span id="update-label">업데이트</span></button>
       <button type="button" class="tool-btn" id="queue-btn" data-internal><span data-icon="send"></span>승인 대기 <span class="badge zero" id="queue-count">0</span></button>
       <button type="button" class="tool-btn" id="client-view-btn" aria-pressed="false"><span data-icon="eye"></span>고객사 공유 보기</button>
       <button type="button" class="tool-btn" id="theme-btn" aria-label="화면 테마 바꾸기"><span data-icon="moon"></span></button>

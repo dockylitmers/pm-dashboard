@@ -1,7 +1,7 @@
 ---
 name: pm
 description: 외주 개발 프로젝트 PM 시스템. PM 워크스페이스(PM이 만든 비공개 GitHub 저장소) 세팅, 새 프로젝트 등록, 개발 범위에서 나오는 고객사 확인 요청 목록(Notion 요청 페이지 형식, 분홍=제안값·노랑=고객사 답), 킥오프 4단계(계약 확인→범위·SRS→고객사 요청→기본 세팅)와 이번 주 할 일, 계약서 점검·대금 단계, GitHub 라벨·스프린트 세팅, 킥오프 회의 자료, 주간 진행상황 보고, GitHub 이슈 기반 일정 예측, 프로젝트 대시보드(고객사 공유본, 캐릭터 에이전트 리미)를 다룬다. 외주·SI·에이전시 프로젝트를 시작하거나 관리할 때, "PM 워크스페이스 세팅", "새 프로젝트 등록", "고객사에 요청할 목록", "요청사항 정리", "계약서 점검", "킥오프 회의 자료", "주간 보고", "오늘 뭐부터", "최신화해 줘", "마감 맞출 수 있어?", "대시보드 열어줘" 같은 말이 나오면 이름을 말하지 않아도 이 스킬을 쓴다. Use for outsourced client projects: workspace setup, kickoff, client request sheets, contract review, repo setup, keeping project facts current, reports, forecasts, and the PM dashboard.
-argument-hint: "[setup | init <id> | status | refresh | sheet | contract | kickoff-kit | report | dashboard]"
+argument-hint: "[setup | init <id> | status | update | refresh | sheet | contract | kickoff-kit | report | dashboard]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/scripts/pm.mjs *)
 ---
 
@@ -140,6 +140,7 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 |---|---|
 | "오늘 뭐부터 해?" | `pm sync`(저장소 있으면) → `pm refresh` → `pm status` → 결론 한 줄, 브리핑, 이번 주 할 일. 다시 확인할 값이 있으면 아래 '최신화'를 먼저 |
 | "최신화해 줘", "이거 최신이야?" | 아래 '최신화' |
+| "자동으로 업데이트되게", "하루 세 번 체크" | 아래 '업데이트와 자동 실행' |
 | "고객사 답 기다리는 거" | `pm list --status requested` → D+7 넘은 것부터 `pm request <item>`(리마인드 초안) |
 | "○○ 정책이 없는데" | `references/client-requests.md`의 받을 곳·진행 방식을 정하고 `pm request <item>` |
 | "마감 맞출 수 있어?" | `pm status --json`, `pm forecast --velocity/--inflow/--descope` (`references/forecast.md`) |
@@ -166,6 +167,18 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 7. 보고: 바뀐 것, 아직 모르는 것, 그 때문에 막히는 일정.
 
 대시보드에서도 항목을 열어 '지금 확인함'을 누르면 확인한 날과 출처가 남는다. 킥오프 화면의 '다시 확인' 거르기로 모아 볼 수 있다.
+
+### 업데이트와 자동 실행
+
+`pm update`는 사람 없이 돌 수 있는 부분이다. GitHub 이슈·마일스톤 스냅샷을 새로 받고 다시 확인할 값을 계산해 `projects/<id>/update.json`에 남긴다. 원본에는 쓰지 않는다.
+
+| 방법 | 명령 |
+|---|---|
+| 대시보드 | 상단 '업데이트' → '지금 업데이트' (`pm serve`일 때) |
+| 터미널 | `pm update` (`--all`이면 모든 프로젝트) |
+| 자동 | `pm schedule install` → 매일 08:30 · 12:30 · 18:30 `pm update --all`, 대시보드 서버(127.0.0.1:4477)도 계속 켜 둔다. `--times`로 시각, `--no-serve`로 서버 제외. 상태 `pm schedule`, 끄기 `pm schedule remove` |
+
+자동 실행은 macOS launchd 사용자 에이전트다(다른 OS는 cron 줄을 보여 준다). 설치 전에 사용자에게 시각과 서버를 켜 둘지 확인한다. 업데이트가 찾은 '다시 확인할 값'을 원본과 대조해 반영하는 일은 위 '최신화' 순서로 사용자와 함께 한다.
 
 사용자가 결정을 내리면 `project.json`의 `decisions`에서 빼고 체크리스트·일정에 반영한다. 결정이 필요한 일은 권장안 먼저, 선택지 2~3개, 기한, 정하지 않으면 막히는 것을 적어 `decisions`에 둔다.
 

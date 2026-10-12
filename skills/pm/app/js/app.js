@@ -15,6 +15,9 @@
   const CLIENT = !!MODE.client;
   const company = MODE.company || "우리 회사";
   const STORE_KEY = "pm-dashboard:v1";
+  // 업데이트(원본 다시 읽기) 상태. 정적 파일에서는 만들 때의 기록만 보인다
+  const upd = { last: Object.fromEntries(Object.entries(window.PM_UPDATES || {}).map(([id, u]) => [id, u])), running: null, schedule: MODE.schedule || null, timer: null };
+  const UPDATE_STALE_HOURS = 12;
 
   // ---------------------------------------------------------------- 저장
   function loadStore() {
@@ -98,6 +101,7 @@
     calendar:
       '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     plug: '<path d="M9 2v6M15 2v6"/><path d="M6 8h12v4a6 6 0 0 1-12 0z"/><path d="M12 18v4"/>',
+    refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/>',
   };
   const icon = (name, extra = "") =>
     `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" ${extra}>${ICONS[name] || ""}</svg>`;
@@ -2033,6 +2037,105 @@
     resources: renderResources,
   };
 
+  // ---------------------------------------------------------------- 업데이트
+  const hhmm = (iso) => {
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+  const whenLabel = (iso) => (F.kstDate(new Date(iso)) === realToday() ? `오늘 ${hhmm(iso)}` : `${F.monthDay(F.kstDate(new Date(iso)))} ${hhmm(iso)}`);
+  const lastUpdate = (id = state.projectId) => upd.last[id]?.last || null;
+  const updateIsStale = (u) => !u || !u.ok || (Date.now() - new Date(u.at).getTime()) / 3_600_000 > UPDATE_STALE_HOURS;
+
+  function paintUpdateButton() {
+    const btn = $("#update-btn");
+    if (!btn) return;
+    const u = lastUpdate();
+    btn.classList.toggle("running", !!upd.running);
+    btn.classList.toggle("stale", !upd.running && updateIsStale(u));
+    $("#update-label").textContent = upd.running ? "업데이트 중…" : u ? `업데이트 ${whenLabel(u.at)}` : "업데이트";
+    btn.title = upd.running ? "원본을 다시 읽는 중" : u ? `마지막 업데이트 ${whenLabel(u.at)}${u.ok ? "" : " (일부 실패)"}` : "아직 업데이트한 적 없음";
+  }
+
+  async function fetchUpdateStatus() {
+    try {
+      const response = await fetch("/api/update", { cache: "no-store" });
+      if (!response.ok) return null;
+      const data = await response.json();
+      upd.running = data.running;
+      upd.schedule = data.schedule?.installed ? { times: data.schedule.times, loaded: data.schedule.loaded } : null;
+      for (const [id, last] of Object.entries(data.last || {})) if (last) upd.last[id] = { ...(upd.last[id] || {}), last };
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  function watchUpdate() {
+    clearInterval(upd.timer);
+    upd.timer = setInterval(async () => {
+      const data = await fetchUpdateStatus();
+      if (!data) return;
+      if (!data.running) {
+        clearInterval(upd.timer);
+        const u = lastUpdate();
+        toast(u?.ok ? `업데이트했습니다 · ${u.summary}` : `업데이트가 일부 실패했습니다 · ${u?.error || ""}`);
+        // 새 스냅샷과 값을 화면에 넣으려면 페이지를 다시 받는다
+        setTimeout(() => location.reload(), 900);
+      }
+      paintUpdateButton();
+      if ($("#drawer").classList.contains("open") && $("#update-drawer")) openUpdateDrawer();
+    }, 2000);
+  }
+
+  async function startUpdate() {
+    try {
+      const response = await fetch("/api/update", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: state.projectId }) });
+      if (response.status === 409) toast("이미 업데이트 중입니다");
+      else if (!response.ok) throw new Error(`${response.status}`);
+    } catch (error) {
+      return toast(`업데이트를 시작하지 못했습니다 (${error.message}). pm serve가 켜져 있는지 확인하세요`);
+    }
+    upd.running = { at: new Date().toISOString() };
+    paintUpdateButton();
+    if ($("#update-drawer")) openUpdateDrawer();
+    watchUpdate();
+  }
+
+  const KIND = { guess: { cls: "warn", label: "추정" }, moved: { cls: "info", label: "GitHub 바뀜" }, stale: { cls: "neutral", label: "오래됨" } };
+  function openUpdateDrawer() {
+    const u = lastUpdate();
+    const history = (upd.last[state.projectId]?.history || []).slice(0, 6);
+    const schedule = upd.schedule
+      ? `<div class="callout">${icon("clock")}<span>자동 업데이트 <b>매일 ${esc(upd.schedule.times.join(" · "))}</b>${upd.schedule.loaded === false ? " (등록됐지만 꺼져 있음)" : ""}</span></div>`
+      : `<div class="callout warn">${icon("clock")}<span>자동 업데이트가 꺼져 있습니다. 터미널에서 <code>pm schedule install</code>을 실행하면 매일 08:30 · 12:30 · 18:30에 업데이트하고 이 서버도 계속 켜 둡니다.</span></div>`;
+    const action = SERVER
+      ? `<div class="btn-row" style="margin:12px 0"><button class="btn accent" id="update-run" ${upd.running ? "disabled" : ""}>${icon("refresh")}${upd.running ? "업데이트 중…" : "지금 업데이트"}</button><span class="muted" style="font-size:12px">GitHub 이슈·마일스톤을 새로 받고 다시 확인할 값을 계산합니다. 몇 초 걸립니다.</span></div>`
+      : `<div class="callout" style="margin:12px 0">${icon("plug")}<span>이 화면은 파일로 연 대시보드라 여기서 업데이트할 수 없습니다. <code>pm serve --open</code>으로 열면 버튼이 생깁니다.</span></div>`;
+    const last = u
+      ? `<div class="section-title">${icon("ok")}마지막 업데이트</div>
+        <p style="margin:0 0 8px"><b>${esc(whenLabel(u.at))}</b> · ${u.trigger === "schedule" ? "자동" : u.trigger === "dashboard" ? "대시보드" : "터미널"} · ${u.durationSec}초${u.ok ? "" : ` · <span class="chip crit">${icon("alert")}일부 실패</span>`}</p>
+        <ul class="update-steps">${(u.steps || []).map((st) => `<li>${chip({ cls: st.ok ? "good" : "crit", icon: st.ok ? "ok" : "alert" }, st.name)}<span class="muted">${esc(st.detail)}</span></li>`).join("")}</ul>
+        <div class="section-title">${icon("check")}다시 확인할 값 ${u.recheck?.total ?? 0}개</div>
+        ${
+          u.recheckItems?.length
+            ? `<div class="list">${u.recheckItems
+                .map((r) => `<button class="row-btn list-row" data-item="${esc(r.id)}"><div><div class="t">${esc(r.title)}</div>${r.github?.length ? `<div class="d">${esc(r.github.join(", "))}</div>` : ""}</div>${chip({ cls: KIND[r.kind]?.cls || "neutral", icon: "minus" }, KIND[r.kind]?.label || r.kind)}</button>`)
+                .join("")}</div>
+              <p class="muted" style="font-size:12px">값을 원본과 대조해 반영하려면 Claude에게 “최신화해 줘”라고 하세요. 직접 확인했다면 항목을 열어 ‘지금 확인함’을 누릅니다.</p>`
+            : `<p class="muted">없습니다. 모든 값이 최근에 원본에서 확인됐어요.</p>`
+        }`
+      : `<p class="muted">아직 업데이트한 적이 없습니다.</p>`;
+    const past = history.length > 1 ? `<div class="section-title">${icon("clock")}기록</div><ul class="history">${history.map((h) => `<li><span class="num">${esc(whenLabel(h.at))}</span><span>${h.trigger === "schedule" ? "자동" : "수동"} · ${esc(h.summary || "")}</span></li>`).join("")}</ul>` : "";
+    openDrawer({
+      kicker: `${icon("refresh")} 업데이트`,
+      title: "원본에서 다시 읽기",
+      sub: upd.running ? `<span class="chip info">${icon("clock")}업데이트 중</span>` : u ? `마지막 ${esc(whenLabel(u.at))}` : "",
+      body: `<div id="update-drawer">${schedule}${action}${last}${past}</div>`,
+    });
+    $("#update-run")?.addEventListener("click", startUpdate);
+    hydrateIcons($("#drawer-body"));
+  }
+
   function updateChrome() {
     const model = getModel();
     const { project, health, forecast } = model;
@@ -2060,6 +2163,7 @@
       ? `GitHub ${syncLabel(forecast.syncedAt)} 스냅샷`
       : "GitHub 연결 전";
     $("#brand-sub").textContent = `${company} 외주 개발`;
+    paintUpdateButton();
     for (const btn of $$(".nav-btn"))
       btn.setAttribute(
         "aria-current",
@@ -2235,6 +2339,12 @@
   $("#drawer-close").addEventListener("click", closeDrawer);
   $("#scrim").addEventListener("click", closeDrawer);
   $("#queue-btn").addEventListener("click", openQueue);
+  $("#update-btn").addEventListener("click", openUpdateDrawer);
+  if (SERVER && !CLIENT)
+    fetchUpdateStatus().then((data) => {
+      paintUpdateButton();
+      if (data?.running) watchUpdate();
+    });
   $("#project-select").addEventListener("change", (event) => {
     state.projectId = event.target.value;
     state.kickoff = { status: "all", category: "all", q: "" };

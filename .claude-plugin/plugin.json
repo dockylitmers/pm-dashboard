@@ -1,6 +1,6 @@
 {
   "name": "pm-dashboard",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "외주 개발 프로젝트 PM 시스템: PM 워크스페이스, 범위 기반 고객사 확인 요청 목록, 킥오프 4단계, 계약 점검, 저장소 세팅, 회의 자료·주간 보고, 일정 예측, 대시보드와 에이전트 캐릭터 리미",
   "author": {
     "name": "dockylitmers"
