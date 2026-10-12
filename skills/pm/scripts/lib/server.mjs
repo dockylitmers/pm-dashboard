@@ -90,6 +90,8 @@ export function serve(ws, { port = 4477, open = false } = {}) {
         const item = project.checklist.find((i) => i.id === a);
         if (!item) return send(res, 404, { error: "item" });
         for (const field of ITEM_FIELDS) if (field in patch) item[field] = patch[field];
+        // 화면에서 확인·저장하면 그날 확인한 것으로 남기고 추정 표시를 지운다
+        if (patch.checked && typeof patch.checked === "object") item.checked = { at: today(), src: String(patch.checked.src || "PM 확인").slice(0, 100) };
         if (fieldAnswers && typeof fieldAnswers === "object")
           for (const f of item.fields || []) if (f.label in fieldAnswers) f.answer = String(fieldAnswers[f.label] ?? "").slice(0, 1000);
         if (item.status && !Core.STATUS[item.status]) return send(res, 400, { error: "status" });

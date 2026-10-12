@@ -2,6 +2,7 @@
  * 대시보드(브라우저)와 pm CLI(node)가 함께 쓰는 프로젝트 모델 계산.
  * - 체크리스트 상태(대기 일수, 기한 지남), 필요 시점과 요청 시작일, 준비율, 건강도, 오늘의 브리핑
  * - 킥오프 4단계와 이번 주 할 일, 고객사 확인 요청 목록(차수별), 계약 점검 요약
+ * - 최신화: 항목마다 마지막 확인일·출처, 추정 값과 오래된 값(다시 확인할 목록)
  * - 고객사 요청서·리마인드 문안 (빈칸 대신 (제안) 값, 결론만, 이슈 번호 없음)
  * DOM에 의존하지 않는다. 브라우저에서는 window.PMCore, node에서는 module.exports.
  */
@@ -27,6 +28,8 @@
   ];
   // 대기 일수가 이 값을 넘으면 기한 지남으로 보고 리마인드를 권한다
   const WAIT_LIMIT_DAYS = 7;
+  // 끝나지 않은 항목을 이 날수보다 오래 확인하지 않으면 '오래됨'으로 다시 확인할 목록에 올린다
+  const STALE_DAYS = 14;
   // 필요 시점(needBy)의 이름. 날짜는 anchorDates가 프로젝트 날짜로 정한다
   const ANCHORS = {
     kickoff: "킥오프",
@@ -109,6 +112,15 @@
         (!!item.due && item.due < today && item.status !== "confirmed" && item.status !== "not_needed") ||
         (item.waitDays ?? 0) > WAIT_LIMIT_DAYS;
       item.priority = item.status !== "confirmed" && item.status !== "not_needed" && !!item.askBy && F.daysBetween(today, item.askBy) <= 7;
+      // 최신화: 값을 마지막으로 원본에서 확인한 날. checked가 없으면 답 받은 날·최근 갱신일로 본다
+      item.checkedAt = [item.checked?.at, item.answeredAt, item.updated].filter(isDate).sort().at(-1) || null;
+      item.checkedSrc = item.checked?.src || null;
+      item.ageDays = item.checkedAt ? Math.max(0, F.daysBetween(item.checkedAt, today)) : null;
+      item.guess = !!item.checked?.guess;
+      // 아무것도 하지 않은 새 항목(없음, 기록 없음)은 오래된 값이 아니라 할 일이라 빼고 요청 시작일로 챙긴다
+      const open = item.status !== "confirmed" && item.status !== "not_needed";
+      item.stale = open && (item.ageDays == null ? item.status !== "missing" : item.ageDays > STALE_DAYS);
+      item.recheck = item.status !== "not_needed" && (item.guess || item.stale);
       return item;
     });
   }
@@ -179,6 +191,16 @@
       actions.push({ type: "remind", item: item.id, late: true, date: item.requested, text: `‘${item.title}’ 리마인드 (요청 D+${item.waitDays})` });
     for (const item of items.filter((i) => i.status === "received" && i.ball === "us"))
       actions.push({ type: "review", item: item.id, late: false, date: item.updated || today, text: `‘${item.title}’ 받은 내용 검토·확정` });
+    const recheck = items.filter((i) => i.recheck);
+    if (recheck.length) {
+      const guess = recheck.filter((i) => i.guess).length;
+      actions.push({
+        type: "recheck",
+        late: false,
+        date: today,
+        text: `다시 확인할 값 ${recheck.length}개 (${[guess && `추정 ${guess}`, recheck.length - guess && `${STALE_DAYS}일 넘게 확인 안 함 ${recheck.length - guess}`].filter(Boolean).join(" · ")})`,
+      });
+    }
     const contract = contractSummary(project, today);
     if (contract && !contract.reviewDone)
       actions.push({ type: "contract", late: false, date: today, text: `계약 점검 ${contract.review.unchecked}개 항목 확인` });
@@ -252,6 +274,9 @@
       readiness: readiness(items),
       waiting: items.filter((item) => item.status === "requested" && item.ball === "client").sort((a, b) => (b.waitDays ?? 0) - (a.waitDays ?? 0)),
       missing: items.filter((item) => item.status === "missing"),
+      recheck: items
+        .filter((item) => item.recheck)
+        .sort((a, b) => Number(b.guess) - Number(a.guess) || (a.blocksDate || "9999").localeCompare(b.blocksDate || "9999")),
       health: health(project, forecast, items, today),
       kickoff: kickoff(project, items, today),
       thisWeek: thisWeek(project, items, { today, forecast }),
@@ -301,6 +326,13 @@
         `${late.map((view) => escHtml(view.title.split(" ")[0])).join(", ")} 마감이 지났는데 <strong>${late.reduce((sum, view) => sum + view.open, 0)}건</strong>이 열려 있습니다. 다음 스프린트로 옮길지 정리가 필요해요.`,
         { view: "schedule" },
       );
+    if (m.recheck?.length) {
+      const guess = m.recheck.filter((i) => i.guess).length;
+      add(
+        `다시 확인할 값 <strong>${m.recheck.length}개</strong>${guess ? ` — 그중 <strong>${guess}개는 추정</strong>이라 담당자 확인이 필요해요` : ` — ${STALE_DAYS}일 넘게 원본에서 확인하지 않았어요`}.`,
+        { view: "kickoff", filter: "recheck" },
+      );
+    }
     if (project.decisions?.length)
       add(
         `오늘 결정할 일 <strong>${project.decisions.length}건</strong>: ${project.decisions
@@ -393,7 +425,7 @@
   function clientSafe(project) {
     const copy = JSON.parse(JSON.stringify(project));
     for (const key of ["decisions", "risks", "team", "queue", "notes", "contract"]) delete copy[key];
-    copy.checklist = (copy.checklist || []).map(({ internal, history, ...rest }) => rest);
+    copy.checklist = (copy.checklist || []).map(({ internal, history, checked, ...rest }) => rest);
     return copy;
   }
 
@@ -402,6 +434,7 @@
     FORECAST_STATUS,
     HEALTH,
     WAIT_LIMIT_DAYS,
+    STALE_DAYS,
     ANCHORS,
     STAGES,
     CONTRACT_REVIEW,

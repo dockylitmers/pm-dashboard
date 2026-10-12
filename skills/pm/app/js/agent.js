@@ -607,6 +607,20 @@
     ]);
   }
 
+  // 최신화: 추정 값과 오래된 값
+  function recheckReply() {
+    const list = model.recheck || [];
+    if (!list.length) return addMessage("bot", `다시 확인할 값이 없어요. 모든 항목을 ${window.PMCore.STALE_DAYS}일 안에 원본에서 확인했고, 추정으로 둔 값도 없어요.`);
+    const guess = list.filter((i) => i.guess);
+    const stale = list.filter((i) => !i.guess);
+    const row = (i) => `• ${esc(i.title)} — ${i.checkedAt ? `확인 ${window.PMForecast.monthDay(i.checkedAt)}` : "확인 기록 없음"}${i.checkedSrc ? ` · ${esc(i.checkedSrc)}` : ""}`;
+    const lines = [`다시 확인할 값 <b>${list.length}개</b>예요.`];
+    if (guess.length) lines.push(`\n<b>추정</b> (원본에서 확인 못 함, 담당자에게 물어볼 것)\n${guess.slice(0, 8).map(row).join("\n")}`);
+    if (stale.length) lines.push(`\n<b>${window.PMCore.STALE_DAYS}일 넘게 확인 안 함</b>\n${stale.slice(0, 8).map(row).join("\n")}`);
+    lines.push("\n확인한 항목은 열어서 ‘지금 확인함’을 누르면 날짜와 출처가 남아요. GitHub 이슈가 바뀐 항목까지 보려면 터미널에서 pm refresh를 쓰세요.");
+    addMessage("bot", lines.join("\n"), [{ label: "다시 확인할 것 보기", icon: "check", primary: true, run: () => App.navigate("kickoff", { filter: "recheck" }) }]);
+  }
+
   function sheetReply() {
     const sh = model.sheet;
     const st = sh.stats;
@@ -650,6 +664,7 @@
       ]);
       return;
     }
+    if (/최신|다시\s*확인|오래된|추정|맞는\s*정보|갱신/.test(t)) return recheckReply();
     if (/계약|대금|잔금|착수금/.test(t)) return contractReply();
     if (/요청\s*목록|요청사항|확인\s*요청|고객사에\s*안내|안내본/.test(t)) return sheetReply();
     if (/킥오프|이번\s*주|단계/.test(t)) return kickoffReply();
@@ -700,6 +715,7 @@
 
 일하는 원칙:
 - 숫자와 사실은 도구로 확인한 대시보드 데이터에서만 가져온다. 모르면 모른다고 말하고 어디서 확인할지 알려 준다.
+- 항목마다 checkedAt(마지막 확인일)과 checkedSrc(확인한 곳)가 있다. guess는 원본에서 확인하지 못한 추정 값, stale은 오래 확인하지 않은 값이다. 이런 값은 사실처럼 단정하지 말고 '추정' 또는 'M/D 기준'이라고 밝힌다. 기록이 없다는 것만으로 '없다'고 말하지 않는다.
 - 일정 예측은 범위로 말한다(예상일, 낙관~비관, 목표일에 남을 양). 유입(새 이슈)과 처리 속도를 구분한다.
 - 외주 프로젝트에서는 '공'이 누구에게 있는지가 중요하다. 고객사 대기 항목은 대기 일수와 막히는 일정을 같이 말한다.
 - 없는 자료는 받을 곳과 진행 방식(고객사 요청 / ${App.company} 초안 후 확인 / 회의 안건)을 제안하고, 요청서는 빈칸 대신 (제안) 값을 채운다.
@@ -909,6 +925,10 @@
         proposal: i.proposal || null,
         internal: i.internal || null,
         resource: i.res?.label || null,
+        checkedAt: i.checkedAt,
+        checkedSrc: i.checkedSrc,
+        guess: i.guess || undefined,
+        stale: i.stale || undefined,
       })),
       decisions: m.project.decisions || [],
       risks: m.project.risks || [],

@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { BALLS, Core, DATE_RE, Docs, F, fmt, gitRemoteRepo, ID_RE, list, openFile, pad, parseArgs, parseDate, SKILL_DIR, today, UsageError } from "./lib/common.mjs";
 import { dashboardHtml } from "./lib/build.mjs";
-import { setupRepo, sync } from "./lib/github.mjs";
+import { issueStates, setupRepo, sync } from "./lib/github.mjs";
 import { applyScope, library, newProject } from "./lib/library.mjs";
 import { markSent, serve } from "./lib/server.mjs";
 import { locate, registered, setup, Workspace } from "./lib/workspace.mjs";
@@ -58,6 +58,11 @@ commands.help = () => {
   projects                        등록된 프로젝트
   validate [--all]                project.json 점검
 
+최신화 (값마다 언제·어디서 확인했는지 남기고, 오래되거나 추정한 값을 다시 확인)
+  refresh [--json] [--offline]    다시 확인할 값: 추정 · ${Core.STALE_DAYS}일 넘게 확인 안 함 · 확인 뒤 GitHub 이슈가 바뀜
+  check <item...> --src 출처 [--guess] [--note 메모]
+                                  값을 원본에서 확인함으로 기록(값이 그대로일 때). --guess는 추정으로 표시
+
 킥오프·현황
   status [--json]                 브리핑·킥오프 단계·예측·고객사 대기
   kickoff [--json]                킥오프 4단계와 이번 주 할 일
@@ -70,11 +75,12 @@ commands.help = () => {
 고객사 요청
   sheet [--format md|notion] [--only-new] [--save] [--mark-sent [--date D]]
                                   고객사 확인 요청 목록 (분홍=제안값, 노랑=고객사 답)
-  answer <item> "라벨=값" ... [--note 답] [--confirm]   고객사 답 기록
+  answer <item> "라벨=값" ... [--note 답] [--confirm] [--src 출처]   고객사 답 기록
   request <item> [--receive notion|drive|email|repo] [--mode ask|draft|meeting] [--due D] [--queue]
                                   항목 하나의 요청서·리마인드 초안 (보내지 않음)
-  list [--status s] [--ball client|us|dev] [--cat c] [--json]
+  list [--status s] [--ball client|us|dev] [--cat c] [--recheck] [--json]
   set <item> [--status s] [--ball b] [--requested today|D] [--due D] [--res-label t] [--res-url u] [--log 기록]
+             [--src 출처] [--guess]
 
 계약
   contract                        계약 점검·대금 단계 보기
@@ -225,6 +231,7 @@ commands.validate = (args) => {
       if (!catIds.has(item.cat)) issues.push(`${where}: categories에 없는 cat '${item.cat}'`);
       for (const field of ["requested", "due", "updated", "blocksDate", "answeredAt"]) if (item[field] && !DATE_RE.test(item[field])) issues.push(`${where}.${field} 형식: ${item[field]}`);
       if (item.needBy && !Core.ANCHORS[item.needBy]) issues.push(`${where}.needBy '${item.needBy}' (가능: ${Object.keys(Core.ANCHORS).join(", ")})`);
+      if (item.checked && (!DATE_RE.test(item.checked.at || "") || typeof item.checked.src !== "string")) issues.push(`${where}.checked 형식: { at: YYYY-MM-DD, src: 출처, guess?: true }`);
       if (item.status === "requested" && !item.requested) issues.push(`${where}: 요청함인데 requested 날짜가 없음(대기 일수를 못 셈)`);
     }
     for (const r of p.contract?.review || []) if (!Core.CONTRACT_REVIEW[r.status || "unchecked"]) issues.push(`contract.review.${r.id}: status '${r.status}'`);
@@ -424,6 +431,7 @@ commands.answer = (args) => {
     done.push(field.label);
   }
   if (typeof args.note === "string") item.answer = args.note;
+  item.checked = checkedMark(args, "고객사 답");
   item.answeredAt = today();
   item.updated = today();
   const before = item.status;
@@ -451,7 +459,7 @@ commands.list = (args) => {
   const { w, id } = target(args);
   const m = buildModel(w, id);
   const ballLabel = Core.labels(w.config.company).BALL;
-  const items = m.checklist.filter((i) => (!args.status || i.status === args.status) && (!args.ball || i.ball === args.ball) && (!args.cat || i.cat === args.cat));
+  const items = m.checklist.filter((i) => (!args.status || i.status === args.status) && (!args.ball || i.ball === args.ball) && (!args.cat || i.cat === args.cat) && (!args.recheck || i.recheck));
   if (args.json) return console.log(JSON.stringify(items, null, 2));
   for (const cat of m.project.categories) {
     const rows = items.filter((i) => i.cat === cat.id).sort((a, b) => Core.STATUS[a.status].order - Core.STATUS[b.status].order || (a.askBy || "9999").localeCompare(b.askBy || "9999"));
@@ -459,7 +467,7 @@ commands.list = (args) => {
     console.log(`\n${cat.name}`);
     for (const i of rows)
       console.log(
-        `  ${pad(i.id, 18)}${pad(Core.STATUS[i.status].label, 10)}${pad(ballLabel[i.ball] || i.ball, 10)}${pad(i.waitDays != null ? `D+${i.waitDays}` : i.askBy && i.status === "missing" ? `${i.late ? "!" : ""}~${F.monthDay(i.askBy)}` : "", 9)}${i.title}${i.blocks ? ` → ${i.blocks}${i.blocksDate ? ` ${F.monthDay(i.blocksDate)}` : ""}` : ""}`,
+        `  ${pad(i.id, 18)}${pad(Core.STATUS[i.status].label, 10)}${pad(ballLabel[i.ball] || i.ball, 10)}${pad(i.waitDays != null ? `D+${i.waitDays}` : i.askBy && i.status === "missing" ? `${i.late ? "!" : ""}~${F.monthDay(i.askBy)}` : "", 9)}${i.guess ? "[추정] " : i.stale ? "[오래됨] " : ""}${i.title}${i.blocks ? ` → ${i.blocks}${i.blocksDate ? ` ${F.monthDay(i.blocksDate)}` : ""}` : ""}`,
       );
   }
 };
@@ -485,6 +493,7 @@ commands.set = (args) => {
   if (args.due) item.due = parseDate(args.due, "due");
   if (args["res-label"] || args["res-url"]) item.res = { label: args["res-label"] || item.res?.label || args["res-url"], url: args["res-url"] || item.res?.url || "" };
   for (const field of ["note", "need", "proposal"]) if (typeof args[field] === "string") item[field] = args[field];
+  if (typeof args.src === "string" || args.guess) item.checked = checkedMark(args, "PM 확인");
   item.updated = today();
   const changes = [];
   if (before.status !== item.status) changes.push(`상태 ${Core.STATUS[before.status]?.label} → ${Core.STATUS[item.status].label}`);
@@ -516,6 +525,123 @@ commands.request = (args) => {
     w.save(id, project);
     console.error(`\n승인 대기열에 넣었습니다 (${entry.id}). 보내지는 않았습니다.`);
   }
+};
+
+// ---------------------------------------------------------------- 최신화
+
+// 값을 원본에서 확인한 기록. --guess는 직접 확인하지 못하고 추정한 값(담당자 확인 전)
+function checkedMark(args, fallback) {
+  const mark = { at: today(), src: typeof args.src === "string" && args.src.trim() ? args.src.trim() : fallback };
+  if (args.guess) mark.guess = true;
+  return mark;
+}
+
+commands.check = (args) => {
+  const { w, id } = target(args);
+  const ids = args._;
+  if (!ids.length) throw new UsageError("pm check <item...> --src 출처 [--guess]");
+  if (typeof args.src !== "string" || !args.src.trim()) throw new UsageError("--src로 확인한 곳을 적으세요 (예: \"Notion 요청 페이지\", \"GitHub #153\", \"고객사 통화\")");
+  const project = w.load(id);
+  for (const itemId of ids) {
+    const item = project.checklist.find((i) => i.id === itemId);
+    if (!item) throw new UsageError(`체크리스트에 ${itemId}가 없습니다`);
+    item.checked = checkedMark(args, "PM 확인");
+    if (typeof args.note === "string") item.note = args.note;
+    item.history = [...(item.history || []), { date: today(), text: `${args.guess ? "추정" : "확인"}: ${item.checked.src}${typeof args.note === "string" ? ` · ${args.note}` : ""}` }];
+  }
+  w.save(id, project);
+  console.log(`${ids.join(", ")}: ${args.guess ? "추정" : "확인"} ${F.shortDate(today())} · ${args.src.trim()}`);
+};
+
+// 항목에 적힌 GitHub 이슈(링크, #번호). 같은 저장소의 #번호만 짧은 형식으로 읽는다
+function issueRefs(item, repo) {
+  const refs = new Map();
+  const text = [item.res?.url, item.res?.label, item.note, item.internal].filter(Boolean).join(" ");
+  for (const m of text.matchAll(/github\.com\/([\w.-]+\/[\w.-]+)\/(?:issues|pull)\/(\d+)/g)) refs.set(`${m[1]}#${m[2]}`, { repo: m[1], n: Number(m[2]) });
+  if (repo) for (const m of text.matchAll(/(?<![\w/&#])#(\d{1,6})\b/g)) if (![...refs.values()].some((r) => r.n === Number(m[1]))) refs.set(`${repo}#${m[1]}`, { repo, n: Number(m[1]) });
+  return [...refs.values()];
+}
+
+commands.refresh = async (args) => {
+  const { w, id } = target(args);
+  const m = buildModel(w, id);
+  const repo = m.project.github?.repo || null;
+  const open = m.checklist.filter((i) => i.status !== "not_needed");
+  const refsByItem = new Map(open.map((i) => [i.id, issueRefs(i, repo)]));
+  let states = new Map();
+  let githubNote = null;
+  const allRefs = [...new Map([...refsByItem.values()].flat().map((r) => [`${r.repo}#${r.n}`, r])).values()];
+  if (args.offline) githubNote = "GitHub 확인 안 함(--offline)";
+  else if (allRefs.length) {
+    try {
+      states = await issueStates(allRefs);
+    } catch (error) {
+      githubNote = `GitHub 확인 못 함: ${error.message}`;
+    }
+  }
+  const rows = open.map((item) => {
+    const changed = refsByItem
+      .get(item.id)
+      .map((r) => ({ ...r, ...(states.get(`${r.repo}#${r.n}`) || {}) }))
+      .filter((r) => r.updated && (!item.checkedAt || r.updated > item.checkedAt));
+    return { item, changed };
+  });
+  const picked = rows.filter(({ item, changed }) => item.recheck || changed.length);
+  const label = (r) => `${r.repo === repo ? "" : r.repo}#${r.n} ${r.state === "closed" ? `닫힘${r.closed ? ` ${F.monthDay(r.closed)}` : ""}` : `갱신 ${F.monthDay(r.updated)}`}`;
+  if (args.json)
+    return console.log(
+      JSON.stringify(
+        {
+          project: id,
+          today: m.today,
+          staleDays: Core.STALE_DAYS,
+          github: githubNote || (allRefs.length ? `이슈 ${allRefs.length}개 확인` : "연결된 이슈 없음"),
+          items: picked.map(({ item, changed }) => ({
+            id: item.id,
+            title: item.title,
+            status: item.status,
+            checkedAt: item.checkedAt,
+            src: item.checkedSrc,
+            guess: item.guess,
+            stale: item.stale,
+            source: item.res || null,
+            github: changed.map((r) => ({ ref: `${r.repo}#${r.n}`, state: r.state, reason: r.reason, updated: r.updated, closed: r.closed, title: r.title })),
+          })),
+        },
+        null,
+        2,
+      ),
+    );
+  const guess = picked.filter(({ item }) => item.guess);
+  const moved = picked.filter(({ item, changed }) => !item.guess && changed.length);
+  const stale = picked.filter(({ item, changed }) => !item.guess && !changed.length);
+  console.log(`${m.project.name} 최신화 점검 (${F.shortDate(m.today)})`);
+  console.log(`다시 확인할 값 ${picked.length}개 — 추정 ${guess.length} · 확인 뒤 GitHub 이슈가 바뀜 ${moved.length} · ${Core.STALE_DAYS}일 넘게 확인 안 함 ${stale.length}`);
+  if (githubNote) console.log(`(${githubNote})`);
+  const when = (item) => (item.checkedAt ? `확인 ${F.monthDay(item.checkedAt)}${item.checkedSrc ? ` · ${item.checkedSrc}` : ""}` : "확인 기록 없음");
+  const section = (title, list, extra) => {
+    if (!list.length) return;
+    console.log(`\n${title}`);
+    for (const row of list) console.log(`  ${pad(row.item.id, 18)}${pad(Core.STATUS[row.item.status].label, 10)}${row.item.title} — ${extra(row)}`);
+  };
+  section("추정 값 (담당자에게 확인)", guess, ({ item }) => `${item.note || when(item)}`);
+  section("확인 뒤 GitHub 이슈가 바뀐 항목", moved, ({ item, changed }) => `${changed.map(label).join(", ")} (${when(item)})`);
+  section(`${Core.STALE_DAYS}일 넘게 확인 안 함`, stale, ({ item }) => when(item));
+  const bySource = new Map();
+  for (const { item } of picked) {
+    const key = item.res?.label || "출처 없음";
+    if (!bySource.has(key)) bySource.set(key, { url: item.res?.url, ids: [] });
+    bySource.get(key).ids.push(item.id);
+  }
+  if (bySource.size) {
+    console.log("\n볼 곳");
+    for (const [key, v] of [...bySource.entries()].sort((a, b) => b[1].ids.length - a[1].ids.length)) console.log(`  ${key}${v.url ? ` (${v.url})` : ""}: ${v.ids.join(", ")}`);
+  }
+  console.log(
+    picked.length
+      ? "\n확인한 뒤: 값이 바뀌었으면 pm answer <item> \"라벨=값\" --src 출처, 그대로면 pm check <item...> --src 출처. 원본에서 못 찾은 값은 '없음'으로 두지 말고 --guess로 표시하고 담당자에게 묻는다."
+      : "\n다시 확인할 값이 없습니다.",
+  );
 };
 
 // ---------------------------------------------------------------- 계약

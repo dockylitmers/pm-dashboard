@@ -1,7 +1,7 @@
 ---
 name: pm
-description: 외주 개발 프로젝트 PM 시스템. PM 워크스페이스(PM이 만든 비공개 GitHub 저장소) 세팅, 새 프로젝트 등록, 개발 범위에서 나오는 고객사 확인 요청 목록(Notion 요청 페이지 형식, 분홍=제안값·노랑=고객사 답), 킥오프 4단계(계약 확인→범위·SRS→고객사 요청→기본 세팅)와 이번 주 할 일, 계약서 점검·대금 단계, GitHub 라벨·스프린트 세팅, 킥오프 회의 자료, 주간 진행상황 보고, GitHub 이슈 기반 일정 예측, 프로젝트 대시보드(고객사 공유본, 캐릭터 에이전트 리미)를 다룬다. 외주·SI·에이전시 프로젝트를 시작하거나 관리할 때, "PM 워크스페이스 세팅", "새 프로젝트 등록", "고객사에 요청할 목록", "요청사항 정리", "계약서 점검", "킥오프 회의 자료", "주간 보고", "오늘 뭐부터", "마감 맞출 수 있어?", "대시보드 열어줘" 같은 말이 나오면 이름을 말하지 않아도 이 스킬을 쓴다. Use for outsourced client projects: workspace setup, kickoff, client request sheets, contract review, repo setup, reports, forecasts, and the PM dashboard.
-argument-hint: "[setup | init <id> | status | sheet | contract | kickoff-kit | report | dashboard]"
+description: 외주 개발 프로젝트 PM 시스템. PM 워크스페이스(PM이 만든 비공개 GitHub 저장소) 세팅, 새 프로젝트 등록, 개발 범위에서 나오는 고객사 확인 요청 목록(Notion 요청 페이지 형식, 분홍=제안값·노랑=고객사 답), 킥오프 4단계(계약 확인→범위·SRS→고객사 요청→기본 세팅)와 이번 주 할 일, 계약서 점검·대금 단계, GitHub 라벨·스프린트 세팅, 킥오프 회의 자료, 주간 진행상황 보고, GitHub 이슈 기반 일정 예측, 프로젝트 대시보드(고객사 공유본, 캐릭터 에이전트 리미)를 다룬다. 외주·SI·에이전시 프로젝트를 시작하거나 관리할 때, "PM 워크스페이스 세팅", "새 프로젝트 등록", "고객사에 요청할 목록", "요청사항 정리", "계약서 점검", "킥오프 회의 자료", "주간 보고", "오늘 뭐부터", "최신화해 줘", "마감 맞출 수 있어?", "대시보드 열어줘" 같은 말이 나오면 이름을 말하지 않아도 이 스킬을 쓴다. Use for outsourced client projects: workspace setup, kickoff, client request sheets, contract review, repo setup, keeping project facts current, reports, forecasts, and the PM dashboard.
+argument-hint: "[setup | init <id> | status | refresh | sheet | contract | kickoff-kit | report | dashboard]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/scripts/pm.mjs *)
 ---
 
@@ -46,6 +46,8 @@ projects/<id>/github.json    이슈 스냅샷 (pm sync, git에 올리지 않음)
 6. **보내는 것은 사람이다.** 고객사·팀으로 나가는 글과 GitHub·Notion 쓰기는 초안까지 만들고, 사용자가 확인한 뒤에만 실행한다.
 7. **고객사에게 가는 글은 결론만.** 이슈 번호, 내부 메모, 코드 용어를 넣지 않는다.
 8. **비밀값은 받지도 적지도 않는다.** 계정은 비밀번호 대신 개발사 계정을 권한 초대로 받는다. 비밀번호·API 키·고객 개인정보는 워크스페이스에도 적지 않는다.
+9. **기록이 없다고 없는 것이 아니다.** 계정·콘솔·통화로 처리된 일은 문서에 안 남는 경우가 많다. 원본에서 찾지 못한 값은 '없음'으로 적지 말고 추정(`--guess`)으로 두고, 어디를 찾아봤는지와 함께 사용자에게 묻는다.
+10. **값에는 확인한 날과 출처가 붙는다.** 값을 기록하거나 다시 확인할 때마다 `--src`로 어디서 확인했는지 남긴다. 오래된 값으로 보고하지 않는다.
 
 ## 처음 쓰는 PM: 워크스페이스 세팅
 
@@ -136,7 +138,8 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 
 | 사용자가 말하면 | 할 일 |
 |---|---|
-| "오늘 뭐부터 해?" | `pm sync`(저장소 있으면) → `pm status` → 결론 한 줄, 브리핑, 이번 주 할 일 |
+| "오늘 뭐부터 해?" | `pm sync`(저장소 있으면) → `pm refresh` → `pm status` → 결론 한 줄, 브리핑, 이번 주 할 일. 다시 확인할 값이 있으면 아래 '최신화'를 먼저 |
+| "최신화해 줘", "이거 최신이야?" | 아래 '최신화' |
 | "고객사 답 기다리는 거" | `pm list --status requested` → D+7 넘은 것부터 `pm request <item>`(리마인드 초안) |
 | "○○ 정책이 없는데" | `references/client-requests.md`의 받을 곳·진행 방식을 정하고 `pm request <item>` |
 | "마감 맞출 수 있어?" | `pm status --json`, `pm forecast --velocity/--inflow/--descope` (`references/forecast.md`) |
@@ -144,6 +147,25 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 | "SRS 만들어 줘" | `references/srs.md` |
 | "대시보드 열어 줘" | `pm build --open` 또는 `pm serve --open` |
 | "고객사에 공유할 화면" | `pm build --project <id> --client` → 사용자가 열어 보고 보낸다 |
+
+### 최신화
+
+프로젝트 데이터는 한 번 채우면 낡는다. 고객사 답, 결정, 콘솔 설정은 대시보드 밖에서 바뀐다. 항목마다 마지막으로 확인한 날과 출처(`checked`)가 있고, `pm refresh`가 다시 볼 것을 모아 준다.
+
+- **추정**: 원본에서 직접 확인하지 못한 값(`--guess`). 담당자 확인 전이다.
+- **확인 뒤 GitHub 이슈가 바뀜**: 항목에 적힌 이슈(링크, `internal`의 #번호)가 마지막 확인 뒤에 바뀌었다.
+- **오래됨**: 끝나지 않은 항목을 14일 넘게 확인하지 않았다(아직 손대지 않은 새 항목은 빼고 요청 시작일로 챙긴다).
+
+순서:
+1. `pm refresh` (`--json`이면 이슈 상태까지 구조로 받는다).
+2. GitHub이 바뀐 항목: 확인일 뒤의 이슈 코멘트(결정 코멘트)를 읽고 반영한다.
+3. Notion 등 고객 소통 원본이 출처인 항목: 그 페이지를 읽어 고객사 답(노랑)과 댓글을 반영한다.
+4. 직접 확인할 수 있는 것은 직접 본다(읽기만): 도메인 DNS, 로그인 시작 주소가 어느 프로젝트 키를 쓰는지, 공개 URL이 열리는지, 스토어 등록 상태.
+5. 기록할 때: 값이 바뀌었으면 `pm answer <item> "라벨=값" --src "출처"` 또는 `pm set <item> --status ... --src "출처"`, 그대로면 `pm check <item...> --src "출처"`.
+6. 남은 추정 값과 콘솔·계약·통화처럼 사용자만 아는 것은 **한 번에 모아** 묻는다. 항목마다 지금 적힌 값, 찾아본 곳, 무엇을 알려 주면 되는지를 한 줄로. 답은 `--src "PM"`으로 기록한다.
+7. 보고: 바뀐 것, 아직 모르는 것, 그 때문에 막히는 일정.
+
+대시보드에서도 항목을 열어 '지금 확인함'을 누르면 확인한 날과 출처가 남는다. 킥오프 화면의 '다시 확인' 거르기로 모아 볼 수 있다.
 
 사용자가 결정을 내리면 `project.json`의 `decisions`에서 빼고 체크리스트·일정에 반영한다. 결정이 필요한 일은 권장안 먼저, 선택지 2~3개, 기한, 정하지 않으면 막히는 것을 적어 `decisions`에 둔다.
 
@@ -163,6 +185,7 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 
 - `need`, `fields`, `proposal`, `note`는 고객사 요청 목록과 공유본에 그대로 나간다. 결론만, 고객사 말로 쓴다.
 - 이슈 번호, 담당자, 내부 사정은 `internal`에 쓴다. 공유본에서 빠진다.
+- 값을 고쳤으면 `checked: { at, src }`도 고친다(`pm check`가 해 준다). 추정한 값이면 `guess: true`.
 
 ## 참고 문서
 

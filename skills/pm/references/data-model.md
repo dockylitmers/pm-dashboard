@@ -50,10 +50,12 @@
 | `res` | `{ label, url }` 원본 위치. 비밀값 금지 | 보임 |
 | `mode`, `receiveAt`, `helper` | 요청서 기본 진행 방식, 받을 곳, `srs`면 SRS 도우미 | 보임 |
 | `lib`, `scopeOff` | 라이브러리에서 온 항목, 범위에서 빠져 해당 없음이 된 항목 | 보임 |
+| `checked` | `{ at, src, guess? }` 마지막으로 원본에서 확인한 날, 확인한 곳, 추정 여부. `pm answer`·`pm set --src`·`pm check`·대시보드 저장이 고친다 | **빠짐** |
 | `internal` | 내부 메모(이슈 번호, 담당자, 사정) | **빠짐** |
 | `history` | `[{ date, text }]` 기록 | **빠짐** |
 
 계산되는 값(파일에 쓰지 않음): `askBy`(요청 시작일), `waitDays`(대기 일수), `late`(요청 시작일 지남), `overdue`(기한 지남 또는 D+7 초과), `priority`(⭐, 요청 시작일까지 7일 이내), `inSheet`.
+최신화 계산: `checkedAt`(checked.at·answeredAt·updated 중 가장 늦은 날), `ageDays`, `guess`, `stale`(확정·해당 없음이 아닌데 14일 넘게 확인 안 함. 아직 손대지 않은 '없음' 항목은 빼고 요청 시작일로 챙긴다), `recheck`(추정 또는 오래됨). `pm refresh`는 여기에 '확인 뒤 GitHub 이슈가 바뀜'을 더한다.
 
 ### 예
 

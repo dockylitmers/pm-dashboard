@@ -131,6 +131,17 @@
 
   const chip = (meta, text) =>
     `<span class="chip ${meta.cls}">${icon(meta.icon)}${esc(text ?? meta.label)}</span>`;
+  // 최신화 표시: 마지막 확인일·출처, 추정 값, 오래된 값
+  const freshHtml = (item) => {
+    if (item.status === "not_needed") return "";
+    const when = item.checkedAt ? `${item.guess ? "" : "확인 "}${F.monthDay(item.checkedAt)}` : "확인 기록 없음";
+    const tag = item.guess
+      ? `<span class="chip warn fresh-tag" title="원본에서 직접 확인하지 못하고 추정한 값">추정</span>`
+      : item.stale
+        ? `<span class="chip neutral fresh-tag" title="${Core.STALE_DAYS}일 넘게 원본에서 확인하지 않음">오래됨</span>`
+        : "";
+    return `<div class="fresh">${tag}<span>${esc(when)}${item.checkedSrc ? ` · ${esc(item.checkedSrc)}` : ""}</span></div>`;
+  };
 
   // ---------------------------------------------------------------- 모델
   // 실제 프로젝트를 먼저, 샘플은 뒤에
@@ -670,7 +681,7 @@
     const q = f.q.trim().toLowerCase();
     const visible = checklist.filter(
       (item) =>
-        (f.status === "all" || item.status === f.status) &&
+        (f.status === "all" || (f.status === "recheck" ? item.recheck : item.status === f.status)) &&
         (f.category === "all" || item.cat === f.category) &&
         (!q ||
           `${item.title} ${item.note || ""} ${item.res?.label || ""}`
@@ -706,7 +717,7 @@
           ${rows
             .map(
               (item) => `<tr data-item="${esc(item.id)}" tabindex="0">
-                <td><div class="title">${esc(item.title)}</div>${item.note ? `<div class="note">${esc(item.note)}</div>` : ""}</td>
+                <td><div class="title">${esc(item.title)}</div>${item.note ? `<div class="note">${esc(item.note)}</div>` : ""}${freshHtml(item)}</td>
                 <td>${chip(STATUS[item.status])}</td>
                 <td class="c-ball"><span class="ball ${esc(item.ball)}">${esc(BALL[item.ball] || "-")}</span></td>
                 <td class="c-res">${item.res?.url ? `<span class="res">${icon("link")}<span>${esc(item.res.label)}</span></span>` : item.res?.label ? `<span class="res">${icon("doc")}<span>${esc(item.res.label)}</span></span>` : `<span class="res none">${icon("plug")}<span>연결 안 됨</span></span>`}</td>
@@ -744,13 +755,14 @@
           <button data-status="all" aria-pressed="${f.status === "all"}">전체<span class="n">${checklist.length}</span></button>
           ${["missing", "requested", "received", "confirmed", "not_needed"].map((key) => `<button data-status="${key}" aria-pressed="${f.status === key}">${STATUS[key].label}<span class="n">${counts[key]}</span></button>`).join("")}
         </div>
+        ${model.recheck.length ? `<div class="seg" role="group" aria-label="최신화"><button data-status="recheck" aria-pressed="${f.status === "recheck"}" title="추정 값과 ${Core.STALE_DAYS}일 넘게 확인하지 않은 값">다시 확인<span class="n">${model.recheck.length}</span></button></div>` : ""}
         ${f.category !== "all" ? `<button class="chip outline" data-cat="all">${esc(project.categories.find((c) => c.id === f.category)?.name)} ✕</button>` : ""}
         <span style="flex:1"></span>
         <label class="sr-only" for="kick-q">항목 찾기</label>
         <input id="kick-q" class="search" type="search" placeholder="항목 찾기" value="${esc(f.q)}" />
       </div>
       ${groups || `<div class="card empty"><b>조건에 맞는 항목이 없어요</b>거르기를 풀어 보세요.</div>`}
-      <p class="muted" style="font-size:12px">공: 지금 다음 행동을 해야 하는 쪽. 대기: 요청한 날부터 센 날짜(D+7을 넘으면 빨간색). ${SERVER ? "상태를 바꾸면 project.json에 바로 저장됩니다." : "상태를 바꾸거나 링크를 연결한 내용은 이 브라우저에만 저장됩니다. 파일에 남기려면 pm serve로 여세요."}</p>`;
+      <p class="muted" style="font-size:12px">공: 지금 다음 행동을 해야 하는 쪽. 대기: 요청한 날부터 센 날짜(D+7을 넘으면 빨간색). 확인: 값을 원본에서 마지막으로 확인한 날과 출처(추정은 담당자 확인 전, 오래됨은 ${Core.STALE_DAYS}일 넘게 확인 안 함). ${SERVER ? "상태를 바꾸면 project.json에 바로 저장됩니다." : "상태를 바꾸거나 링크를 연결한 내용은 이 브라우저에만 저장됩니다. 파일에 남기려면 pm serve로 여세요."}</p>`;
   }
 
   // ---------------------------------------------------------------- 요청서
@@ -868,8 +880,9 @@
       ${item.requested ? `<dt>요청일</dt><dd class="num">${F.shortDate(item.requested)}${item.waitDays != null ? ` · <span class="wait ${item.overdue ? "late" : ""}">D+${item.waitDays}</span>` : ""}</dd>` : ""}
       ${item.due ? `<dt>기한</dt><dd class="num">${F.shortDate(item.due)}</dd>` : ""}
       ${item.blocks ? `<dt>막는 일정</dt><dd>${esc(item.blocks)}${item.blocksDate ? ` (${F.shortDate(item.blocksDate)})` : ""}</dd>` : ""}
-      ${item.updated ? `<dt>최근 확인</dt><dd class="num">${F.shortDate(item.updated)}</dd>` : ""}
-    </dl>`;
+      ${item.status !== "not_needed" ? `<dt>최근 확인</dt><dd>${item.checkedAt ? `<span class="num">${F.shortDate(item.checkedAt)}</span>` : "기록 없음"}${item.checkedSrc ? ` · ${esc(item.checkedSrc)}` : ""}${item.guess ? ` <span class="chip warn fresh-tag">추정</span>` : item.stale ? ` <span class="chip neutral fresh-tag">오래됨</span>` : ""}</dd>` : ""}
+    </dl>
+    ${item.status !== "not_needed" ? `<div class="btn-row" data-internal style="margin:-4px 0 12px"><input id="ck-src" class="search" style="flex:1;min-width:0" placeholder="확인한 곳 (예: Notion 요청 페이지, 콘솔, 고객사 통화)" value="${esc(item.guess ? "" : item.checkedSrc || "")}"/><button class="btn" id="ck-save">${icon("check")}지금 확인함</button></div>` : ""}`;
     const note = item.note
       ? `<div class="callout">${icon("doc")}<span>${esc(item.note)}</span></div>`
       : "";
@@ -998,12 +1011,18 @@
         closeDrawer();
       });
     }
+    $("#ck-save", body)?.addEventListener("click", () => {
+      const src = $("#ck-src", body).value.trim() || "PM 확인";
+      setItem(item.id, { checked: { at: realToday(), src } }, `확인: ${src}`);
+      closeDrawer();
+      toast("확인한 날을 기록했습니다");
+    });
     $("#st-save", body).addEventListener("click", () => {
       const status = $("#st-status", body).value;
       const ball = $("#st-ball", body).value;
       const label = $("#st-res-label", body).value.trim();
       const url = $("#st-res-url", body).value.trim();
-      const patch = { status, ball, updated: realToday() };
+      const patch = { status, ball, updated: realToday(), checked: { at: realToday(), src: "PM (대시보드)" } };
       if (label || url)
         patch.res = {
           label: label || url,
@@ -1769,7 +1788,7 @@
     return `<div class="list">${week
       .slice(0, limit)
       .map((a) => {
-        const target = a.item ? `data-item="${esc(a.item)}"` : a.type === "contract" ? 'data-go="kickoff" data-anchor="contract"' : a.type === "sprint" ? 'data-go="schedule"' : "";
+        const target = a.item ? `data-item="${esc(a.item)}"` : a.type === "contract" ? 'data-go="kickoff" data-anchor="contract"' : a.type === "sprint" ? 'data-go="schedule"' : a.type === "recheck" ? 'data-go="kickoff" data-filter="recheck"' : "";
         return `<button class="row-btn list-row" ${target}><div><div class="t">${a.late ? `<span class="chip crit" style="margin-right:6px">${icon("alert")}늦음</span>` : ""}${esc(a.text)}</div></div><span class="muted num" style="font-size:12px">${a.date ? F.monthDay(a.date) : ""}</span></button>`;
       })
       .join("")}${week.length > limit ? `<div class="card-foot">외 ${week.length - limit}개</div>` : ""}</div>`;
@@ -1874,7 +1893,7 @@
       return false;
     }
     const status = confirm ? "confirmed" : "received";
-    const patch = { status, answeredAt: realToday(), updated: realToday() };
+    const patch = { status, answeredAt: realToday(), updated: realToday(), checked: { at: realToday(), src: "고객사 답 (대시보드)" } };
     if (!confirm) patch.ball = "us";
     if (note) patch.answer = note;
     const log = `고객사 답 기록 · ${STATUS[status].label}`;

@@ -92,3 +92,30 @@ export async function setupRepo(repo, dates, { apply = false } = {}) {
   }
   return plan;
 }
+
+// 이슈 여러 개의 현재 상태(pm refresh). refs: [{ repo, n }] → Map("owner/repo#n" → { state, reason, updated, closed, title, pr } | { error })
+export async function issueStates(refs) {
+  const auth = token();
+  const out = new Map();
+  const queue = [...refs];
+  const worker = async () => {
+    for (let ref = queue.shift(); ref; ref = queue.shift()) {
+      const key = `${ref.repo}#${ref.n}`;
+      try {
+        const { data } = await call(auth, "GET", `/repos/${ref.repo}/issues/${ref.n}`);
+        out.set(key, {
+          state: data.state,
+          reason: data.state_reason,
+          updated: F.kstDate(new Date(data.updated_at)),
+          closed: data.closed_at ? F.kstDate(new Date(data.closed_at)) : null,
+          title: data.title,
+          pr: !!data.pull_request,
+        });
+      } catch (error) {
+        out.set(key, { error: String(error.message || error).slice(0, 120) });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  return out;
+}
