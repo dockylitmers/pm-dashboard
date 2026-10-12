@@ -1838,7 +1838,7 @@
             <td><div class="title">${esc(item.title)}</div><div style="margin-top:4px">${chip(STATUS[item.status])}</div></td>
             <td>${esc(item.need ? Core.fill(item.need, project) : "")}${item.blocksDate ? `<div class="note">${esc(item.blocks)}(${F.monthDay(item.blocksDate)}) 전에 필요</div>` : ""}</td>
             <td>${infoHtml(project, item)}</td>
-            <td>${item.askBy && item.status !== "confirmed" ? `<div class="wait ${item.late || item.overdue ? "late" : ""}">회신 ${F.shortDate(item.askBy)}까지</div>` : ""}${item.waitDays != null ? `<div class="note">요청 D+${item.waitDays}</div>` : ""}${item.note ? `<div class="note">${esc(item.note)}</div>` : ""}</td>
+            <td>${item.askBy && (item.status === "missing" || item.status === "requested") ? `<div class="wait ${item.late || item.overdue ? "late" : ""}">회신 ${F.shortDate(item.askBy)}까지</div>` : ""}${item.answeredAt ? `<div class="note">답 ${F.monthDay(item.answeredAt)}</div>` : ""}${item.waitDays != null ? `<div class="note">요청 D+${item.waitDays}</div>` : ""}${item.note ? `<div class="note">${esc(item.note)}</div>` : ""}</td>
           </tr>`;
         })
         .join("");
