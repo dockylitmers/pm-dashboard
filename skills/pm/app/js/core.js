@@ -425,7 +425,9 @@
   function clientSafe(project) {
     const copy = JSON.parse(JSON.stringify(project));
     for (const key of ["decisions", "risks", "team", "queue", "notes", "contract"]) delete copy[key];
-    copy.checklist = (copy.checklist || []).map(({ internal, history, checked, ...rest }) => rest);
+    // 출처 링크는 고객 소통 공간(Notion)만 남긴다. GitHub 이슈·저장소 문서 경로는 내부 정보다
+    const sharedRes = (res) => (res && /notion\.(so|site|com)/.test(res.url || "") && !/#\d|github/i.test(res.label || "") ? res : undefined);
+    copy.checklist = (copy.checklist || []).map(({ internal, history, checked, res, ...rest }) => ({ ...rest, ...(sharedRes(res) ? { res } : {}) }));
     return copy;
   }
 
