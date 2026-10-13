@@ -123,12 +123,15 @@ export const logDir = (w) => path.join(w.dir, ".pm-logs");
 
 const sh = (command, timeout = 20000) => execFileSync("/bin/sh", ["-lc", command], { encoding: "utf8", timeout, stdio: ["ignore", "pipe", "pipe"] });
 export function claudeBin() {
-  if (process.env.PM_CLAUDE_BIN) return process.env.PM_CLAUDE_BIN;
-  try {
-    return sh("command -v claude").trim() || null;
-  } catch {
-    return null;
-  }
+  if (process.env.PM_CLAUDE_BIN && fs.existsSync(process.env.PM_CLAUDE_BIN)) return process.env.PM_CLAUDE_BIN;
+  // PATH에서 먼저 찾고, 없으면 로그인 셸(zsh 등)의 PATH로 찾는다
+  for (const dir of (process.env.PATH || "").split(":")) if (dir && fs.existsSync(path.join(dir, "claude"))) return path.join(dir, "claude");
+  for (const shell of [process.env.SHELL, "/bin/sh"].filter(Boolean))
+    try {
+      const found = execFileSync(shell, ["-lic", "command -v claude"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15000 }).trim().split("\n").pop();
+      if (found?.startsWith("/")) return found;
+    } catch {}
+  return null;
 }
 
 // 읽기 도구와 이 워크스페이스를 고치는 pm CLI만 허용한다. 나머지는 dontAsk 모드에서 자동으로 거절된다

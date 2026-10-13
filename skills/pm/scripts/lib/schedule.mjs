@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { UsageError } from "./common.mjs";
-import { logDir, PM_SCRIPT } from "./update.mjs";
+import { claudeBin, logDir, PM_SCRIPT } from "./update.mjs";
 import { GLOBAL_CONFIG } from "./workspace.mjs";
 
 const UPDATE_LABEL = "com.pm-dashboard.update";
@@ -36,12 +36,14 @@ function plist(dict) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n${render(dict, 0)}\n</plist>\n`;
 }
 
+// 사용자의 로그인 셸(zsh 등)에서 찾는다. /bin/sh는 ~/.zshrc의 PATH를 모른다
 const which = (cmd) => {
-  try {
-    return execFileSync("/bin/sh", ["-lc", `command -v ${cmd}`], { encoding: "utf8" }).trim() || null;
-  } catch {
-    return null;
-  }
+  for (const shell of [process.env.SHELL, "/bin/sh"].filter(Boolean))
+    try {
+      const found = execFileSync(shell, ["-lic", `command -v ${cmd}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15000 }).trim().split("\n").pop();
+      if (found && found.startsWith("/")) return found;
+    } catch {}
+  return null;
 };
 
 // Homebrew Cellar 경로는 node를 올리면 사라지므로 셸의 node(링크 경로)를 먼저 쓴다
@@ -49,7 +51,7 @@ const nodeBin = () => which("node") || process.execPath;
 
 // launchd는 PATH가 짧아서 node·gh가 있는 폴더를 넣어 준다
 function launchPath() {
-  const dirs = [path.dirname(nodeBin()), ...["gh", "git"].map(which).filter(Boolean).map((p) => path.dirname(p)), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+  const dirs = [path.dirname(nodeBin()), ...["gh", "git", "claude"].map(which).filter(Boolean).map((p) => path.dirname(p)), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"];
   return [...new Set(dirs)].join(":");
 }
 
@@ -74,9 +76,18 @@ const launchctl = (...args) => {
   }
 };
 const loaded = (label) => launchctl("print", `${domain()}/${label}`);
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+// bootout은 비동기라 켜져 있던 서버가 내려갈 때까지 기다렸다가 다시 올린다
 function load(label) {
-  launchctl("bootout", `${domain()}/${label}`);
-  if (!launchctl("bootstrap", domain(), plistPath(label))) throw new Error(`launchctl bootstrap 실패: ${plistPath(label)}`);
+  if (loaded(label)) {
+    launchctl("bootout", `${domain()}/${label}`);
+    for (let i = 0; i < 50 && loaded(label); i += 1) pause(200);
+  }
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (launchctl("bootstrap", domain(), plistPath(label))) return;
+    pause(1000);
+  }
+  throw new Error(`launchctl bootstrap 실패: ${plistPath(label)} (launchctl bootstrap ${domain()} ${plistPath(label)}로 다시 해 보세요)`);
 }
 
 function parseTimes(times) {
@@ -105,7 +116,9 @@ export function scheduleInstall(w, { times, deep = false, serve = true, port = 4
   fs.mkdirSync(logs, { recursive: true });
   fs.mkdirSync(agentsDir(), { recursive: true });
   const runner = writeRunner();
-  const env = { PATH: launchPath(), ...(process.env.XDG_CONFIG_HOME ? { XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME } : {}) };
+  // 전체 업데이트가 쓸 claude는 설치할 때 찾은 경로로 고정한다(launchd에는 셸 설정이 없다)
+  const claude = claudeBin();
+  const env = { PATH: launchPath(), ...(claude ? { PM_CLAUDE_BIN: claude } : {}), ...(process.env.XDG_CONFIG_HOME ? { XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME } : {}) };
   fs.writeFileSync(
     plistPath(UPDATE_LABEL),
     plist({
