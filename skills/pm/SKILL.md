@@ -175,7 +175,7 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 | 빠른 (`pm update`) | GitHub 이슈·마일스톤 스냅샷을 새로 받고 다시 확인할 값을 계산한다 | 몇 초 |
 | 전체 (`pm update --deep`) | 빠른 업데이트에 더해, Claude Code를 headless로 띄워 위 '최신화' 순서대로 GitHub 코멘트·Notion 요청 페이지를 읽고 `pm answer·set·check --src`로 반영한다. 못 찾은 값은 추정으로 두고 '답해 주실 것'(asks)으로 남긴다 | 몇 분 |
 
-결과는 `projects/<id>/update.json`에 남고 대시보드 상단 '업데이트' 창에 보인다. 어느 쪽도 원본(GitHub·Notion)에는 쓰지 않는다. 전체 업데이트의 Claude는 읽기 도구(gh issue/pr view·list, Notion fetch·search·comments, dig, Read)와 이 워크스페이스의 pm CLI만 쓸 수 있고, 나머지 도구는 묻지 않고 거절된다(`--permission-mode dontAsk`). 워크스페이스 설정 `update.allowedTools`로 읽기 도구를 더할 수 있다(예: 사내 시스템 MCP의 조회 도구).
+결과는 `projects/<id>/update.json`에 남고 대시보드 상단 '업데이트' 창에 보인다. 어느 쪽도 원본(GitHub·Notion)에는 쓰지 않는다. 전체 업데이트의 Claude는 읽기 도구(gh issue/pr view·list, Notion fetch·search·comments, dig, Read·Grep·Glob)와 이 워크스페이스의 pm CLI만 쓸 수 있고, 나머지 도구는 묻지 않고 거절된다(`--permission-mode dontAsk`). 워크스페이스 설정 `update.allowedTools`로 읽기 도구를 더할 수 있다(예: 사내 시스템 MCP의 조회 도구).
 
 | 방법 | 명령 |
 |---|---|
