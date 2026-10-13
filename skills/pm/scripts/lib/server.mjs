@@ -99,13 +99,25 @@ export function serve(ws, { port = 4477, open = false } = {}) {
         return send(res, upstream.status, await upstream.text());
       }
 
-      const match = url.pathname.match(/^\/api\/projects\/([a-z0-9-]+)\/(items|resources|queue|sheet|contract)(?:\/([^/]+))?(?:\/([^/]+))?$/);
+      const match = url.pathname.match(/^\/api\/projects\/([a-z0-9-]+)\/(items|resources|queue|sheet|contract|sprints)(?:\/([^/]+))?(?:\/([^/]+))?$/);
       if (!match) return send(res, 404, { error: "not found" });
       const [, id, kind, rawA, rawB] = match;
       const a = rawA ? decodeURIComponent(rawA) : null;
       const b = rawB ? decodeURIComponent(rawB) : null;
       const project = ws.load(id);
       const save = () => ws.save(id, project);
+
+      // 스프린트 목표 저장
+      if (kind === "sprints" && req.method === "POST" && a) {
+        const { goal = "" } = await readBody(req);
+        if (!/^[\w.·-]{1,40}$/.test(a)) return send(res, 400, { error: "sprint" });
+        project.sprints = { ...(project.sprints || {}) };
+        const text = String(goal).trim().slice(0, 500);
+        if (text) project.sprints[a] = { ...(project.sprints[a] || {}), goal: text, updated: today() };
+        else delete project.sprints[a];
+        save();
+        return send(res, 200, { ok: true, sprint: project.sprints[a] || null });
+      }
 
       if (kind === "items" && req.method === "POST" && a) {
         const { patch = {}, logText, fieldAnswers } = await readBody(req);

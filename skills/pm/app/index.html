@@ -194,6 +194,43 @@
   .vbars b { text-align: right; color: var(--ink); font-size: 13px; }
   .why { margin: 0 0 12px; padding-left: 18px; font-size: 13px; color: var(--ink-2); display: grid; gap: 4px; }
   .section-h { font-size: 15px; margin: 24px 0 12px; }
+  .wbs-scroll { overflow-x: auto; }
+  .wbs { width: 100%; min-width: 1000px; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+  .wbs th, .wbs td { padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wbs thead th { font-size: 12px; color: var(--ink-3); font-weight: 600; position: relative; }
+  .wbs td.no { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .wbs td.goal { color: var(--ink-2); font-size: 12px; }
+  .wbs tr.lvl1 td { background: var(--surface-sunk); }
+  .wbs tr.lvl2 td.name { padding-left: 14px; }
+  .wbs tr.lvl3 td { font-size: 12px; color: var(--ink-2); padding-top: 4px; padding-bottom: 4px; }
+  .wbs tr.lvl3 td.name { padding-left: 40px; }
+  .wbs tr.lvl3.done td { color: var(--ink-3); }
+  .wbs tr.cur td { background: var(--accent-wash); }
+  .wbs .gantt { position: relative; padding: 0; }
+  .wbs td.gantt { height: 30px; }
+  .wbs-months { position: relative; height: 18px; }
+  .wbs-months span { position: absolute; top: 2px; font-size: 11px; color: var(--ink-3); transform: translateX(2px); }
+  .wbs-bar { position: absolute; top: 9px; height: 12px; border-radius: 4px; background: var(--s-neutral); overflow: hidden; }
+  .wbs-bar i { display: block; height: 100%; background: rgba(0, 0, 0, 0.18); }
+  .wbs-bar.dev { background: var(--s1); }
+  .wbs-bar.qa { background: var(--s3); }
+  .wbs-bar.review { background: var(--violet); }
+  .wbs-bar.sprint { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); }
+  .wbs-bar.sprint i { background: var(--accent); }
+  .wbs-bar.sprint.late { border-color: var(--crit); }
+  .wbs-bar.sprint.late i { background: var(--crit); }
+  .wbs-dia { position: absolute; top: 10px; width: 10px; height: 10px; background: var(--ink); transform: translateX(-5px) rotate(45deg); border-radius: 2px; }
+  .wbs-dia.release { background: var(--crit); }
+  .wbs-today { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--crit); opacity: 0.7; }
+  .wbs .chip { padding: 1px 7px 1px 5px; font-size: 11px; }
+  .wbs .mini { display: inline-block; width: 34px; height: 6px; border-radius: 3px; background: var(--surface-sunk); overflow: hidden; vertical-align: middle; }
+  .wbs .mini i { display: block; height: 100%; background: var(--accent); }
+  .wbs-toggle { border: 0; background: none; width: 18px; padding: 0; color: var(--ink-3); cursor: pointer; font-size: 12px; }
+  .wbs-toggle:disabled { opacity: 0.3; cursor: default; }
+  .wbs td.name .link-btn { font-weight: 600; }
+  .bar-item.clickable, .tl-bar.sprint[data-sprint] { cursor: pointer; }
+  .bar-item.clickable:hover .name { color: var(--accent-ink); text-decoration: underline; }
+  #sp-goal { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); resize: vertical; }
   .ch-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex-wrap: wrap; }
   .sched-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
   .sched-table th, .sched-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }

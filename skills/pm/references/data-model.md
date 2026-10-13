@@ -32,6 +32,7 @@
 | `resources` | `[{ id, name, glyph, desc, url }]` | 원본 위치 |
 | `srs` | 객체 | `{ exists, location, url, summary, counts, platforms, roles, features }` |
 | `queue` | 배열 | 승인 대기열(대시보드, `pm request --queue`) |
+| `sprints` | `{ "SP-05": { goal, updated } }` | 스프린트 목표. 키는 GitHub 마일스톤 제목의 첫 낱말. `pm sprint`, 대시보드 스프린트 창. 고객사 공유본에서 빠짐 |
 
 ### 체크리스트 항목
 

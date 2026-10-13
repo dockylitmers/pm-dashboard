@@ -76,6 +76,7 @@ commands.help = () => {
   request <item> [--receive notion|drive|email|repo] [--mode ask|draft|meeting] [--due D] [--queue]
                                   항목 하나의 요청서·리마인드 초안 (보내지 않음)
   list [--status s] [--ball client|us|dev] [--cat c] [--recheck] [--json]
+  sprint [<SP-05> --goal "목표"]    스프린트 목록과 목표 보기·입력
   set <item> [--status s] [--ball b] [--requested today|D] [--due D] [--res-label t] [--res-url u] [--log 기록]
              [--src 출처] [--guess] [--note 결론] [--internal 내부 메모]
 
@@ -685,6 +686,31 @@ commands.schedule = (args) => {
     const u = readUpdate(w, id)?.last;
     console.log(`  ${pad(id, 22)}${u ? `${localTime(u.at)} · ${u.trigger === "schedule" ? "자동" : "수동"} · ${u.ok ? "" : "일부 실패 · "}${u.summary}` : "업데이트 기록 없음"}`);
   }
+};
+
+// ---------------------------------------------------------------- 스프린트
+
+commands.sprint = (args) => {
+  const { w, id } = target(args);
+  const [code] = args._;
+  if (code && typeof args.goal === "string") {
+    const project = w.load(id);
+    project.sprints = { ...(project.sprints || {}) };
+    if (args.goal.trim()) project.sprints[code] = { ...(project.sprints[code] || {}), goal: args.goal.trim(), updated: today() };
+    else delete project.sprints[code];
+    w.save(id, project);
+    return console.log(`${code} 목표: ${args.goal.trim() || "(지움)"}`);
+  }
+  const m = buildModel(w, id);
+  const goals = m.project.sprints || {};
+  const views = m.forecast?.views?.filter((v) => v.isSprint) || [];
+  if (!views.length && !Object.keys(goals).length) return console.log("스프린트가 없습니다. GitHub 마일스톤(SP-01 · 10/26~10/30)을 만들고 pm sync 하세요.");
+  for (const v of views) {
+    const key = v.title.split(/\s/)[0];
+    console.log(`${pad(key, 8)}${pad(`${v.start ? F.monthDay(v.start) : ""}~${v.due ? F.monthDay(v.due) : ""}`, 14)}${pad(`${v.closed}/${v.total}`, 9)}${v.isCurrent ? "▶ " : v.isLate ? "! " : "  "}${goals[key]?.goal || "(목표 없음)"}`);
+  }
+  for (const key of Object.keys(goals).filter((k) => !views.some((v) => v.title.split(/\s/)[0] === k))) console.log(`${pad(key, 8)}${pad("", 23)}  ${goals[key].goal}`);
+  console.log("\n목표 입력: pm sprint SP-05 --goal \"결제·환불 흐름 끝내기\"");
 };
 
 // ---------------------------------------------------------------- 계약

@@ -429,6 +429,8 @@
     project.resources ||= [];
     project.channels ||= {};
     project.queue ||= [];
+    // 스프린트 목표: { "SP-05": { goal } }. 키는 GitHub 마일스톤 제목의 첫 낱말
+    project.sprints ||= {};
     project.receiveDefault ||= "notion";
     project.forecastConfig = {
       baselineEnd: dates.devStart ? F.addDays(dates.devStart, 3) : today,
@@ -461,7 +463,7 @@
   // 고객사 공유본에서 빼는 내부 정보
   function clientSafe(project) {
     const copy = JSON.parse(JSON.stringify(project));
-    for (const key of ["decisions", "risks", "team", "queue", "notes", "contract"]) delete copy[key];
+    for (const key of ["decisions", "risks", "team", "queue", "notes", "contract", "sprints"]) delete copy[key];
     // 출처 링크는 고객 소통 공간(Notion)만 남긴다. GitHub 이슈·저장소 문서 경로는 내부 정보다
     const sharedRes = (res) => (res && /notion\.(so|site|com)/.test(res.url || "") && !/#\d|github/i.test(res.label || "") ? res : undefined);
     copy.checklist = (copy.checklist || []).map(({ internal, history, checked, res, ...rest }) => ({ ...rest, ...(sharedRes(res) ? { res } : {}) }));

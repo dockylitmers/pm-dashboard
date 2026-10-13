@@ -32,7 +32,7 @@ Claude Code 플러그인으로 설치한다. PM이 만든 비공개 GitHub 저�
 Claude Code에서:
 
 ```
-/plugin marketplace add dockylitmers/pm-dashboard
+/plugin marketplace add litmers-dev/pm-dashboard
 /plugin install pm-dashboard@pm-dashboard
 ```
 
@@ -239,7 +239,7 @@ pm schedule remove                        # 자동 업데이트·서버 끄기
 | 오늘 | 지금 단계(예: 개발 29/46일째 · SP-05), 리미 브리핑, 마감 예측(결론 한 문장과 이유), 지표 네 칸(다음 관문 D-day, 남은 이슈와 주마다 줄어드는 양, 다음 관문 전 준비, 고객사 답 기다림), 이번 주 할 일(늦은 것부터), 고객사 답 기다림(급한 것부터), 전체 일정(자세히 보기 → 일정·속도), 결정, 스프린트, 위험. 킥오프 진행은 개발 착수 전까지만 보인다 |
 | 킥오프 체크리스트 | 4단계, 이번 주 할 일, 개발 범위, 계약 점검·대금 단계, 분야별 항목(상태·공·확인일·출처) |
 | 고객사 요청 | 요청 목록(차수별, 분홍·노랑), 답 기록, Markdown·Notion 형식 복사, 보낸 것으로 표시 |
-| 일정·속도 | 일정(도표와 단계·주요 일정·스프린트 표: 기간, 진행, 상태), 속도와 완료 예측(예측 띠, 남은 이슈 추이, 가정 바꿔 보기, 스프린트, 주간 흐름) |
+| 일정·속도 | WBS(단계 → 스프린트·주요 일정 → 이슈, 목표·기간·일수·진행·상태와 기간 막대. 스프린트를 누르면 오른쪽 창에서 기간·진행·예측·담당자별 열린 이슈·이슈 목록을 보고 목표를 적는다, ▸로 이슈 펼치기), 속도와 완료 예측(예측 띠, 남은 이슈 추이, 가정 바꿔 보기, 스프린트, 주간 흐름) |
 | 이슈 | 담당자별, 고객사·논의 대기, 오래된 이슈 |
 | 리소스·연결 | 문서 만들기, SRS, 연결 상태, 원본 링크 |
 
@@ -303,6 +303,8 @@ pm sheet --mark-sent                      # 보낸 뒤
 pm answer cs "대표 전화번호=02-000-0000" --src "Notion 요청 페이지" [--confirm]
 pm request domain --due 2026-10-30 [--queue]   # 요청서·리마인드 초안 (보내지 않음)
 pm list --status requested --ball client
+pm sprint                                 # 스프린트 목록과 목표
+pm sprint SP-05 --goal "결제·환불 흐름을 고객 화면에서 끝까지 쓸 수 있다"
 pm set srs --status received --src "고객사 메일"
 pm set domain --internal "DNS 담당자 확인 중"   # 내부 메모 (고객사 공유본에서 빠짐)
 

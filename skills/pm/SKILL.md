@@ -143,6 +143,7 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 | "자동으로 업데이트되게", "하루 세 번 체크" | 아래 '업데이트와 자동 실행' |
 | "고객사 답 기다리는 거" | `pm list --status requested` → D+7 넘은 것부터 `pm request <item>`(리마인드 초안) |
 | "○○ 정책이 없는데" | `references/client-requests.md`의 받을 곳·진행 방식을 정하고 `pm request <item>` |
+| "스프린트 목표 적어 줘", "SP-05 목표는 ○○" | `pm sprint` (목록) → `pm sprint SP-05 --goal "…"`. 대시보드 일정·속도의 WBS에서 스프린트를 눌러 오른쪽 창에서 적어도 된다. 목표는 '스프린트가 끝나면 무엇이 되어 있어야 하나' 한 문장 |
 | "마감 맞출 수 있어?" | `pm status --json`, `pm forecast --velocity/--inflow/--descope` (`references/forecast.md`) |
 | "주간 보고 써 줘" | `pm report --save` (팀용), `pm report --client --save` (고객사용) |
 | "SRS 만들어 줘" | `references/srs.md` |

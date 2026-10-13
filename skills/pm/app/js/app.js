@@ -156,6 +156,8 @@
       : projectIds[0],
     view: store.view || "overview",
     kickoff: { status: "all", category: "all", q: "" },
+    // WBS에서 이슈를 펼친 마일스톤 번호
+    wbsOpen: new Set(),
     issues: {
       state: "open",
       milestone: "all",
@@ -490,7 +492,7 @@
         .filter((v) => v.isSprint && v.start)
         .map((v) => {
           const cls = v.isLate ? "late" : v.due < today ? "done" : "";
-          return `<div class="tl-bar sprint ${cls}" style="left:${pct(v.start)};width:${width(v.start, v.due)}" title="${esc(`${v.title} · ${v.closed}/${v.total} 완료${v.isLate ? ` · ${v.open}건 남음` : ""}`)}"><span class="fill" style="width:${v.percent}%"></span><span>${esc(v.title.split(" ")[0])}</span></div>`;
+          return `<div class="tl-bar sprint ${cls}" data-sprint="${v.number}" role="button" tabindex="0" style="left:${pct(v.start)};width:${width(v.start, v.due)}" title="${esc(`${v.title} · ${v.closed}/${v.total} 완료${v.isLate ? ` · ${v.open}건 남음` : ""}`)}"><span class="fill" style="width:${v.percent}%"></span><span>${esc(v.title.split(" ")[0])}</span></div>`;
         })
         .join("")}${todayLine.replace("<b>오늘</b>", "")}</div></div>`;
       const p = forecast.project;
@@ -625,7 +627,9 @@
           : v.start > forecast.today
             ? `${F.shortDate(v.start)} 시작 · ${sp?.total ?? v.total}건 계획`
             : "첫 근무일이 지나면 예측이 시작됩니다";
-      sprintHtml = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b>${esc(v.title)}</b><span class="muted num">${v.closed}/${v.total}</span></div>
+      const goalNow = sprintGoal(project, sprintKey(v));
+      sprintHtml = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><button class="link-btn" data-sprint="${v.number}" style="font-weight:700;font-size:14px">${esc(v.title)}</button><span class="muted num">${v.closed}/${v.total}</span></div>
+        ${!CLIENT ? `<div class="stat-note" style="margin:4px 0 8px">${goalNow ? `목표: ${esc(goalNow)}` : `<button class="link-btn" data-sprint="${v.number}">목표 적기 →</button>`}</div>` : ""}
         <div class="meter"><span style="width:${v.percent}%;background:var(--accent)"></span></div>
         <div class="stat-note" style="margin-top:6px">${esc(statusLine)}</div>
         ${late.map((view) => `<div class="callout warn" style="margin-top:12px">${icon("alert")}<span><b>${esc(view.title.split(" ")[0])}</b> 마감(${F.monthDay(view.due)})이 지났고 ${view.open}건이 열려 있습니다.</span></div>`).join("")}
@@ -634,7 +638,7 @@
           .slice(0, 2)
           .map(
             (view) =>
-              `<div class="bar-item"><span class="name">${esc(view.title.split(" ")[0])}</span><span class="trackbar"><span style="width:${view.percent}%;background:var(--accent)"></span></span><span class="val">${view.closed}/${view.total}</span></div>`,
+              `<div class="bar-item clickable" data-sprint="${view.number}" role="button" tabindex="0"><span class="name">${esc(view.title.split(" ")[0])}</span><span class="trackbar"><span style="width:${view.percent}%;background:var(--accent)"></span></span><span class="val">${view.closed}/${view.total}</span></div>`,
           )
           .join("")}</div>`;
     }
@@ -695,35 +699,144 @@
     hydrateIcons($("#drawer-body"));
   }
 
-  // 자세한 일정 표: 단계 · 주요 일정 · 스프린트
-  function scheduleTableHtml(model) {
+  // ---------------------------------------------------------------- WBS · 스프린트
+  const sprintKey = (view) => view.title.split(/\s/)[0];
+  function sprintGoal(project, key) {
+    const local = SERVER ? null : store.overrides[project.id]?.__sprints?.[key];
+    return (local ?? project.sprints?.[key]?.goal) || "";
+  }
+  function setSprintGoal(key, goal) {
+    const project = PROJECTS[state.projectId];
+    if (SERVER) {
+      project.sprints = { ...(project.sprints || {}) };
+      if (goal) project.sprints[key] = { ...(project.sprints[key] || {}), goal };
+      else delete project.sprints[key];
+      api(`/api/projects/${encodeURIComponent(project.id)}/sprints/${encodeURIComponent(key)}`, "POST", { goal });
+    } else {
+      const o = projectOverrides(state.projectId);
+      o.__sprints = { ...(o.__sprints || {}), [key]: goal };
+      saveStore();
+    }
+  }
+
+  // WBS: 단계 → 마일스톤(스프린트·출시·주요 일정) → 이슈. 오른쪽은 기간 막대
+  function wbsHtml(model) {
     const { project, forecast } = model;
     const today = realToday();
-    const dd = (date) => {
-      const n = F.daysBetween(today, date);
-      return n === 0 ? "오늘" : n > 0 ? `D-${n}` : `${-n}일 전`;
+    const { start, end } = project.timeline;
+    const span = Math.max(1, F.daysBetween(start, end));
+    const pct = (date) => Math.max(0, Math.min(100, (F.daysBetween(start, date) / span) * 100));
+    const bar = (a, b, cls, fill = null) =>
+      `<span class="wbs-bar ${cls}" style="left:${pct(a).toFixed(2)}%;width:${Math.max(0.8, ((F.daysBetween(a, b) + 1) / span) * 100).toFixed(2)}%">${fill != null ? `<i style="width:${fill}%"></i>` : ""}</span>`;
+    const diamond = (date, cls = "") => `<span class="wbs-dia ${cls}" style="left:${pct(date).toFixed(2)}%"></span>`;
+    const todayLine = today >= start && today <= end ? `<span class="wbs-today" style="left:${pct(today).toFixed(2)}%"></span>` : "";
+    const stateOf = (a, b) => (b < today ? "done" : a <= today ? "now" : "next");
+    const STATE = { done: { cls: "neutral", icon: "ok", label: "끝남" }, now: { cls: "info", icon: "clock", label: "진행 중" }, next: { cls: "neutral", icon: "minus", label: "예정" }, late: { cls: "crit", icon: "alert", label: "늦음" } };
+    let months = "";
+    for (let day = start; day <= end; day = F.addDays(day, 1)) if (day.endsWith("-01") || day === start) months += `<span style="left:${pct(day).toFixed(2)}%">${Number(day.slice(5, 7))}월</span>`;
+
+    const phases = (project.phases || []).filter((ph) => ph.start && ph.end).sort((a, b) => a.start.localeCompare(b.start));
+    const views = (forecast?.views || []).filter((v) => v.due);
+    const issues = forecast?.issues || [];
+    // 마일스톤마다 들어갈 단계: 마감일이 단계 기간 안이면 그 단계, 아니면 마감일 전에 시작한 마지막 단계
+    const phaseOf = (date) => phases.find((ph) => ph.start <= date && date <= ph.end) || [...phases].reverse().find((ph) => ph.start <= date) || phases[0] || null;
+    const children = new Map(phases.map((ph) => [ph, []]));
+    const orphan = [];
+    const put = (date, row) => {
+      const ph = phaseOf(date);
+      (ph ? children.get(ph) : orphan).push(row);
     };
-    const state = (start, end) => (end < today ? chip({ cls: "neutral", icon: "ok" }, "끝남") : start <= today ? chip({ cls: "info", icon: "clock" }, "진행 중") : chip({ cls: "neutral", icon: "minus" }, "예정"));
+    for (const v of views) put(v.due, { type: "ms", v, date: v.start || v.due });
+    for (const m of project.milestones || []) if (!views.some((v) => v.due === m.date && v.isRelease)) put(m.date, { type: "mark", m, date: m.date });
+
     const rows = [];
-    rows.push(`<tr class="grp"><th colspan="5">단계</th></tr>`);
-    for (const ph of project.phases || [])
-      rows.push(`<tr><td>${esc(ph.name)}</td><td class="num">${F.monthDay(ph.start)} ~ ${F.monthDay(ph.end)}</td><td class="num">${F.daysBetween(ph.start, ph.end) + 1}일</td><td>${state(ph.start, ph.end)}</td><td class="num muted">${ph.start <= today && today <= ph.end ? `${F.daysBetween(ph.start, today) + 1}일째 · 끝까지 ${dd(ph.end)}` : ph.start > today ? `시작 ${dd(ph.start)}` : ""}</td></tr>`);
-    if (project.milestones?.length) {
-      rows.push(`<tr class="grp"><th colspan="5">주요 일정</th></tr>`);
-      for (const m of project.milestones) rows.push(`<tr><td>${esc(m.name)}</td><td class="num">${F.shortDate(m.date)}</td><td></td><td>${m.date < today ? chip({ cls: "neutral", icon: "ok" }, "지남") : chip({ cls: "neutral", icon: "flag" }, dd(m.date))}</td><td></td></tr>`);
-    }
-    const sprints = forecast?.views?.filter((v) => v.isSprint) || [];
-    if (sprints.length) {
-      rows.push(`<tr class="grp"><th colspan="5">스프린트 (GitHub 마일스톤)</th></tr>`);
-      for (const v of sprints) {
-        const cur = v === forecast.current;
-        const sp = forecast.sprint;
-        const note = v.isLate ? `마감 지남 · ${v.open}건 열림` : cur && sp?.pace != null ? (sp.finish ? `하루 ${sp.pace.toFixed(1)}건 → ${F.monthDay(sp.finish)} 완료 예상` : `약 ${sp.carryover}건이 다음으로 넘어감`) : "";
-        const st = v.isLate ? chip({ cls: "crit", icon: "alert" }, "늦음") : v.start && v.due ? state(v.start, v.due) : "";
-        rows.push(`<tr${cur ? ' class="cur"' : ""}><td>${esc(v.title.split(" ")[0])}</td><td class="num">${v.start ? `${F.monthDay(v.start)} ~ ` : ""}${v.due ? F.monthDay(v.due) : ""}</td><td><span class="trackbar" style="display:inline-block;width:80px;vertical-align:middle"><span style="width:${v.percent}%;background:var(--accent)"></span></span> <span class="num">${v.closed}/${v.total}</span></td><td>${st}</td><td class="muted">${esc(note)}</td></tr>`);
+    let n = 0;
+    const groups = [...phases.map((ph) => ({ ph, kids: children.get(ph) })), ...(orphan.length ? [{ ph: null, kids: orphan }] : [])];
+    for (const { ph, kids } of groups) {
+      n += 1;
+      kids.sort((a, b) => a.date.localeCompare(b.date));
+      const sprintKids = kids.filter((k) => k.type === "ms");
+      const closed = sprintKids.reduce((sum, k) => sum + k.v.closed, 0);
+      const total = sprintKids.reduce((sum, k) => sum + k.v.total, 0);
+      if (ph) {
+        const st = stateOf(ph.start, ph.end);
+        const days = F.daysBetween(ph.start, ph.end) + 1;
+        const timePct = st === "done" ? 100 : st === "next" ? 0 : Math.round(((F.daysBetween(ph.start, today) + 1) / days) * 100);
+        const prog = total ? `${closed}/${total}` : `${timePct}%`;
+        const pctVal = total ? Math.round((closed / total) * 100) : timePct;
+        rows.push(`<tr class="lvl1"><td class="no">${n}</td><td class="name"><b>${esc(ph.name)}</b></td><td class="goal">${ph.kind === "kickoff" ? "계약·범위·고객사 요청·기본 세팅" : ph.kind === "qa" ? "고객사 검수와 수정" : ph.kind === "dev" ? `스프린트 ${sprintKids.filter((k) => k.v.isSprint).length}개` : ""}</td><td class="num">${F.monthDay(ph.start)}~${F.monthDay(ph.end)}</td><td class="num">${days}일</td><td><span class="mini"><i style="width:${pctVal}%"></i></span> <span class="num">${prog}</span></td><td>${chip(STATE[st])}</td><td class="gantt">${bar(ph.start, ph.end, ph.kind, pctVal)}${todayLine}</td></tr>`);
+      } else rows.push(`<tr class="lvl1"><td class="no">${n}</td><td class="name"><b>그 밖의 일정</b></td><td></td><td></td><td></td><td></td><td></td><td class="gantt">${todayLine}</td></tr>`);
+      let k = 0;
+      for (const kid of kids) {
+        k += 1;
+        const no = `${n}.${k}`;
+        if (kid.type === "mark") {
+          const m = kid.m;
+          rows.push(`<tr class="lvl2"><td class="no">${no}</td><td class="name">◆ ${esc(m.name)}</td><td class="goal"></td><td class="num">${F.monthDay(m.date)}</td><td class="num">-</td><td></td><td>${chip(m.date < today ? STATE.done : { cls: "neutral", icon: "flag", label: `D-${F.daysBetween(today, m.date)}` })}</td><td class="gantt">${diamond(m.date)}${todayLine}</td></tr>`);
+          continue;
+        }
+        const v = kid.v;
+        const key = sprintKey(v);
+        const open = state.wbsOpen.has(v.number);
+        const st = v.isLate ? "late" : v.start ? stateOf(v.start, v.due) : v.due < today ? "done" : "next";
+        const goal = sprintGoal(project, key);
+        const mine = issues.filter((i) => i.milestone === v.number);
+        rows.push(`<tr class="lvl2${v.isCurrent ? " cur" : ""}"><td class="no">${no}</td><td class="name"><button class="wbs-toggle" data-wbs-toggle="${v.number}" aria-expanded="${open}" aria-label="이슈 ${open ? "접기" : "펼치기"}" ${mine.length ? "" : "disabled"}>${open ? "▾" : "▸"}</button><button class="link-btn" data-sprint="${v.number}">${esc(v.isSprint ? key : v.title)}</button></td><td class="goal" title="${esc(goal)}">${goal ? esc(goal) : v.isSprint ? `<span class="muted">목표 없음</span>` : ""}</td><td class="num">${v.start ? `${F.monthDay(v.start)}~` : ""}${F.monthDay(v.due)}</td><td class="num">${v.start ? `${F.daysBetween(v.start, v.due) + 1}일` : "-"}</td><td><span class="mini"><i style="width:${v.percent}%"></i></span> <span class="num">${v.closed}/${v.total}</span></td><td>${chip(STATE[st])}</td><td class="gantt">${v.start ? bar(v.start, v.due, `sprint ${st}`, v.percent) : diamond(v.due, v.isRelease ? "release" : "")}${todayLine}</td></tr>`);
+        if (open) {
+          const sorted = [...mine].sort((a, b) => (a.state === b.state ? a.number - b.number : a.state === "open" ? -1 : 1));
+          sorted.forEach((issue, j) => {
+            const done = issue.state === "closed";
+            rows.push(`<tr class="lvl3${done ? " done" : ""}"><td class="no">${no}.${j + 1}</td><td class="name" colspan="2"><a href="${esc(project.github?.repoUrl || "")}/issues/${issue.number}" target="_blank" rel="noopener">#${issue.number}</a> ${esc(issue.title)}</td><td class="muted" colspan="2">${esc((issue.assignees || []).join(", "))}</td><td>${done ? "닫힘" : "열림"}</td><td></td><td class="gantt">${todayLine}</td></tr>`);
+          });
+        }
       }
     }
-    return `<div style="overflow-x:auto"><table class="sched-table"><thead><tr><th>이름</th><th>기간·날짜</th><th>길이·진행</th><th>상태</th><th>참고</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
+    return `<div class="wbs-scroll"><table class="wbs">
+      <colgroup><col style="width:48px"><col style="width:124px"><col style="width:160px"><col style="width:106px"><col style="width:50px"><col style="width:108px"><col style="width:84px"><col></colgroup>
+      <thead><tr><th>WBS</th><th>작업</th><th>목표</th><th>기간</th><th>일수</th><th>진행</th><th>상태</th><th class="gantt"><div class="wbs-months">${months}</div></th></tr></thead>
+      <tbody>${rows.join("")}</tbody></table></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">스프린트 이름을 누르면 오른쪽에 상세가 열리고 목표를 적을 수 있습니다. ▸를 누르면 그 스프린트의 이슈가 펼쳐집니다. 진행은 닫은 이슈/전체(단계는 하위 스프린트 합계, 스프린트가 없으면 지난 날짜 비율).</p>`;
+  }
+
+  // 스프린트·마일스톤 상세(오른쪽 창): 기간, 진행, 예측, 목표 입력, 이슈
+  function openSprintDrawer(number) {
+    const model = getModel();
+    const { project, forecast } = model;
+    const v = forecast?.views?.find((x) => String(x.number) === String(number));
+    if (!v) return;
+    const key = sprintKey(v);
+    const today = realToday();
+    const mine = (forecast.issues || []).filter((i) => i.milestone === v.number);
+    const open = mine.filter((i) => i.state === "open");
+    const closed = mine.filter((i) => i.state !== "open");
+    const sp = v.isCurrent ? forecast.sprint : null;
+    const st = v.isLate ? chip({ cls: "crit", icon: "alert" }, "늦음") : v.start && v.start <= today && v.due >= today ? chip({ cls: "info", icon: "clock" }, "진행 중") : v.due < today ? chip({ cls: "neutral", icon: "ok" }, "끝남") : chip({ cls: "neutral", icon: "minus" }, "예정");
+    const goal = sprintGoal(project, key);
+    const byPerson = new Map();
+    for (const i of open) for (const a of i.assignees?.length ? i.assignees : ["담당 없음"]) byPerson.set(a, (byPerson.get(a) || 0) + 1);
+    const issueRow = (i) => `<div class="list-row"><div><div class="t"><a href="${esc(project.github?.repoUrl || "")}/issues/${i.number}" target="_blank" rel="noopener">#${i.number}</a> ${esc(i.title)}</div><div class="d">${esc((i.assignees || []).join(", ") || "담당 없음")}${i.labels?.length ? ` · ${esc(i.labels.slice(0, 3).join(", "))}` : ""}</div></div></div>`;
+    const forecastLine = sp?.pace != null ? (sp.finish ? `하루 ${sp.pace.toFixed(1)}건씩 닫는 중 → ${F.shortDate(sp.finish)} 완료 예상` : `하루 ${sp.pace.toFixed(1)}건씩 닫는 중 → 마감까지 약 ${sp.carryover}건이 남아 다음 스프린트로`) : v.isLate ? `마감(${F.shortDate(v.due)})이 지났고 ${v.open}건이 열려 있습니다. 다음 스프린트로 옮길지 정하세요.` : "";
+    const body = `
+      <dl class="kv">
+        <dt>기간</dt><dd class="num">${v.start ? `${F.shortDate(v.start)} ~ ` : ""}${F.shortDate(v.due)}${v.start ? ` (${F.daysBetween(v.start, v.due) + 1}일)` : ""}</dd>
+        <dt>진행</dt><dd><span class="num">${v.closed}/${v.total} (${v.percent}%)</span><div class="meter" style="margin-top:6px"><span style="width:${v.percent}%;background:var(--accent)"></span></div></dd>
+        ${forecastLine ? `<dt>예측</dt><dd>${esc(forecastLine)}</dd>` : ""}
+        ${byPerson.size ? `<dt>열린 이슈</dt><dd>${[...byPerson.entries()].sort((a, b) => b[1] - a[1]).map(([name, count]) => `${esc(name)} ${count}`).join(" · ")}</dd>` : ""}
+      </dl>
+      <div class="section-title">${icon("flag")}스프린트 목표</div>
+      ${CLIENT ? `<p>${goal ? esc(goal) : '<span class="muted">목표가 없습니다</span>'}</p>` : `<label class="sr-only" for="sp-goal">스프린트 목표</label><textarea id="sp-goal" rows="3" placeholder="이 스프린트가 끝나면 무엇이 되어 있어야 하나요? 예: 결제·환불 흐름을 고객 화면에서 끝까지 쓸 수 있다">${esc(goal)}</textarea>
+      <div class="btn-row" style="margin-top:8px"><button class="btn accent" id="sp-save">${icon("ok")}목표 저장</button>${SERVER ? "" : '<span class="muted" style="font-size:12px">이 브라우저에만 저장됩니다. pm serve로 열면 파일에 저장됩니다.</span>'}</div>`}
+      ${mine.length ? `<div class="section-title">${icon("list")}열린 이슈 ${open.length}</div>${open.length ? `<div class="list">${open.map(issueRow).join("")}</div>` : '<p class="muted">없습니다.</p>'}
+      <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">닫힌 이슈 ${closed.length}</summary><div class="list">${closed.map(issueRow).join("")}</div></details>` : CLIENT ? "" : '<p class="muted" style="margin-top:12px">이슈 목록은 GitHub 스냅샷에서 옵니다(pm sync).</p>'}
+      ${project.github?.repoUrl && !CLIENT ? `<p style="margin-top:14px"><a href="${esc(project.github.repoUrl)}/milestone/${v.number}" target="_blank" rel="noopener">${icon("ext")}GitHub 마일스톤 열기</a></p>` : ""}`;
+    openDrawer({ kicker: `${icon("flag")} ${v.isSprint ? "스프린트" : "마일스톤"}`, title: v.title, sub: `${st}${v.isCurrent ? ' <span class="muted">지금 스프린트</span>' : ""}`, body });
+    $("#sp-save")?.addEventListener("click", () => {
+      setSprintGoal(key, $("#sp-goal").value.trim());
+      toast("스프린트 목표를 저장했습니다");
+      render();
+      openSprintDrawer(number);
+    });
+    hydrateIcons($("#drawer-body"));
   }
 
   function risksHtml(project) {
@@ -1544,7 +1657,7 @@
     const base = model.forecast;
     if (!base?.project) {
       return `<div class="view-head"><div><h1>일정·속도</h1><p>${esc(project.name)}</p></div></div>
-        <section class="card" id="schedule-detail" style="margin-bottom:16px"><div class="card-head"><h2>계획 일정</h2></div>${timelineHtml(model)}${scheduleTableHtml(model)}</section>
+        <section class="card" id="schedule-detail" style="margin-bottom:16px"><div class="card-head"><div class="ch-title"><h2>WBS</h2><span class="sub">단계 → 스프린트·주요 일정</span></div></div>${wbsHtml(model)}</section>
         <section class="card"><div class="empty"><b>이슈 트래커가 아직 연결되지 않았어요</b>개발 이슈가 쌓이면 처리·유입 속도로 완료일을 예측합니다.<br/>GitHub 저장소를 정한 뒤 project.json의 github.repo에 저장소(owner/repo)를 적고 <code>pm sync --project ${esc(project.id)}</code>를 실행하세요.</div></section>`;
     }
     const s = state.scenario;
@@ -1567,9 +1680,8 @@
         <div>${chip(st, `${p.targetLabel} 예측 ${st.label}`)}</div>
       </div>
       <section class="card" id="schedule-detail" style="margin-bottom:16px">
-        <div class="card-head"><h2>일정</h2><span class="sub">단계 · 주요 일정 · 스프린트</span></div>
-        ${timelineHtml(model)}
-        ${scheduleTableHtml(model)}
+        <div class="card-head"><div class="ch-title"><h2>WBS</h2><span class="sub">단계 → 스프린트·주요 일정 → 이슈</span></div><span class="sub">${esc(syncLabel(f.syncedAt))} GitHub 기준</span></div>
+        ${wbsHtml(model)}
       </section>
       <h2 class="section-h" id="velocity">속도와 완료 예측</h2>
       <div class="forecast-strip">
@@ -1602,7 +1714,7 @@
           <div class="bar-list">${f.views
             .map(
               (v) =>
-                `<div class="bar-item"><span class="name" title="${esc(v.title)}">${v.isCurrent ? "▶ " : ""}${esc(v.title.split(" · ")[0])}</span><span class="trackbar" title="${esc(`${v.title} ${v.closed}/${v.total}`)}"><span style="width:${v.percent}%;background:${v.isLate ? "var(--crit)" : "var(--accent)"}"></span></span><span class="val">${v.closed}/${v.total}${v.isLate ? " ⚠" : ""}</span></div>`,
+                `<div class="bar-item clickable" data-sprint="${v.number}" role="button" tabindex="0"><span class="name" title="${esc(v.title)}">${v.isCurrent ? "▶ " : ""}${esc(v.title.split(" · ")[0])}</span><span class="trackbar" title="${esc(`${v.title} ${v.closed}/${v.total}`)}"><span style="width:${v.percent}%;background:${v.isLate ? "var(--crit)" : "var(--accent)"}"></span></span><span class="val">${v.closed}/${v.total}${v.isLate ? " ⚠" : ""}</span></div>`,
             )
             .join("")}</div>
           <div class="card-foot">⚠ 마감이 지났는데 열린 이슈가 있는 마일스톤. ▶ 진행 중.</div>
@@ -2313,10 +2425,17 @@
   }
 
   document.addEventListener("click", (event) => {
-    const t = event.target.closest("button, tr[data-item], tr[data-answer], [data-item]");
+    const t = event.target.closest("button, tr[data-item], tr[data-answer], [data-item], [data-sprint]");
     if (!t) return;
     if (t.matches(".nav-btn")) return navigate(t.dataset.view);
     if (t.hasAttribute("data-week-all")) return openWeekDrawer();
+    if (t.dataset.wbsToggle) {
+      const n = Number(t.dataset.wbsToggle);
+      if (state.wbsOpen.has(n)) state.wbsOpen.delete(n);
+      else state.wbsOpen.add(n);
+      return render();
+    }
+    if (t.dataset.sprint) return openSprintDrawer(t.dataset.sprint);
     if (t.hasAttribute("data-update-open")) return openUpdateDrawer();
     if (t.dataset.go)
       return navigate(t.dataset.go, { filter: t.dataset.filter, anchor: t.dataset.anchor });
@@ -2397,6 +2516,10 @@
       openItem(event.target.dataset.item);
     if (event.key === "Enter" && event.target.matches("tr[data-answer]"))
       openAnswerDrawer(event.target.dataset.answer);
+    if ((event.key === "Enter" || event.key === " ") && event.target.matches("div[data-sprint]")) {
+      event.preventDefault();
+      openSprintDrawer(event.target.dataset.sprint);
+    }
   });
   document.addEventListener("input", (event) => {
     const t = event.target;
