@@ -16,7 +16,7 @@
   const company = MODE.company || "우리 회사";
   const STORE_KEY = "pm-dashboard:v1";
   // 업데이트(원본 다시 읽기) 상태. 정적 파일에서는 만들 때의 기록만 보인다
-  const upd = { last: Object.fromEntries(Object.entries(window.PM_UPDATES || {}).map(([id, u]) => [id, u])), running: null, schedule: MODE.schedule || null, timer: null };
+  const upd = { last: Object.fromEntries(Object.entries(window.PM_UPDATES || {}).map(([id, u]) => [id, u])), running: null, schedule: MODE.schedule || null, deepReady: false, timer: null };
   const UPDATE_STALE_HOURS = 12;
 
   // ---------------------------------------------------------------- 저장
@@ -2052,7 +2052,8 @@
     const u = lastUpdate();
     btn.classList.toggle("running", !!upd.running);
     btn.classList.toggle("stale", !upd.running && updateIsStale(u));
-    $("#update-label").textContent = upd.running ? "업데이트 중…" : u ? `업데이트 ${whenLabel(u.at)}` : "업데이트";
+    const asks = u?.asks?.length || 0;
+    $("#update-label").textContent = upd.running ? "업데이트 중…" : u ? `업데이트 ${whenLabel(u.at)}${asks ? ` · 답할 것 ${asks}` : ""}` : "업데이트";
     btn.title = upd.running ? "원본을 다시 읽는 중" : u ? `마지막 업데이트 ${whenLabel(u.at)}${u.ok ? "" : " (일부 실패)"}` : "아직 업데이트한 적 없음";
   }
 
@@ -2062,7 +2063,8 @@
       if (!response.ok) return null;
       const data = await response.json();
       upd.running = data.running;
-      upd.schedule = data.schedule?.installed && !data.schedule.otherWorkspace ? { times: data.schedule.times, loaded: data.schedule.loaded } : null;
+      upd.schedule = data.schedule?.installed && !data.schedule.otherWorkspace ? { times: data.schedule.times, loaded: data.schedule.loaded, deep: data.schedule.deep } : null;
+      upd.deepReady = !!data.deepReady;
       for (const [id, last] of Object.entries(data.last || {})) if (last) upd.last[id] = { ...(upd.last[id] || {}), last };
       return data;
     } catch {
@@ -2087,15 +2089,15 @@
     }, 2000);
   }
 
-  async function startUpdate() {
+  async function startUpdate(deep = false) {
     try {
-      const response = await fetch("/api/update", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: state.projectId }) });
+      const response = await fetch("/api/update", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: state.projectId, deep }) });
       if (response.status === 409) toast("이미 업데이트 중입니다");
       else if (!response.ok) throw new Error(`${response.status}`);
     } catch (error) {
       return toast(`업데이트를 시작하지 못했습니다 (${error.message}). pm serve가 켜져 있는지 확인하세요`);
     }
-    upd.running = { at: new Date().toISOString() };
+    upd.running = { at: new Date().toISOString(), mode: deep ? "deep" : "quick" };
     paintUpdateButton();
     if ($("#update-drawer")) openUpdateDrawer();
     watchUpdate();
@@ -2106,15 +2108,23 @@
     const u = lastUpdate();
     const history = (upd.last[state.projectId]?.history || []).slice(0, 6);
     const schedule = upd.schedule
-      ? `<div class="callout">${icon("clock")}<span>자동 업데이트 <b>매일 ${esc(upd.schedule.times.join(" · "))}</b>${upd.schedule.loaded === false ? " (등록됐지만 꺼져 있음)" : ""}</span></div>`
-      : `<div class="callout warn">${icon("clock")}<span>자동 업데이트가 꺼져 있습니다. 터미널에서 <code>pm schedule install</code>을 실행하면 매일 08:30 · 12:30 · 18:30에 업데이트하고 이 서버도 계속 켜 둡니다.</span></div>`;
+      ? `<div class="callout">${icon("clock")}<span>자동 업데이트 <b>매일 ${esc(upd.schedule.times.join(" · "))}</b> · ${upd.schedule.deep ? "전체(Claude가 원본을 읽고 반영)" : "빠른(GitHub·다시 확인할 값)"}${upd.schedule.loaded === false ? " (등록됐지만 꺼져 있음)" : ""}${upd.schedule.deep ? "" : ". 원본까지 반영하려면 터미널에서 <code>pm schedule install --deep</code>"}</span></div>`
+      : `<div class="callout warn">${icon("clock")}<span>자동 업데이트가 꺼져 있습니다. 터미널에서 <code>pm schedule install --deep</code>을 실행하면 매일 08:30 · 12:30 · 18:30에 Claude가 원본을 읽고 반영하고, 이 서버도 계속 켜 둡니다. 필요한 세팅은 <code>pm doctor</code>가 점검합니다.</span></div>`;
+    const running = upd.running ? `업데이트 중…${upd.running.mode === "deep" ? " (전체, 몇 분)" : ""}` : "";
     const action = SERVER
-      ? `<div class="btn-row" style="margin:12px 0"><button class="btn accent" id="update-run" ${upd.running ? "disabled" : ""}>${icon("refresh")}${upd.running ? "업데이트 중…" : "지금 업데이트"}</button><span class="muted" style="font-size:12px">GitHub 이슈·마일스톤을 새로 받고 다시 확인할 값을 계산합니다. 몇 초 걸립니다.</span></div>`
+      ? `<div class="btn-row" style="margin:12px 0 4px">
+          <button class="btn" id="update-run" ${upd.running ? "disabled" : ""}>${icon("refresh")}${running || "빠른 업데이트"}</button>
+          ${upd.deepReady ? `<button class="btn accent" id="update-deep" ${upd.running ? "disabled" : ""}>${icon("sparkles")}전체 업데이트</button>` : ""}
+        </div>
+        <p class="muted" style="font-size:12px;margin:0 0 12px">빠른: GitHub 이슈·마일스톤을 새로 받고 다시 확인할 값을 계산합니다(몇 초). ${upd.deepReady ? "전체: Claude가 GitHub 코멘트와 Notion 요청 페이지를 읽고 바뀐 값을 반영합니다(몇 분). 원본에는 쓰지 않습니다." : "전체 업데이트는 이 PC에 Claude Code가 있어야 합니다(pm doctor)."}</p>`
       : `<div class="callout" style="margin:12px 0">${icon("plug")}<span>이 화면은 파일로 연 대시보드라 여기서 업데이트할 수 없습니다. <code>pm serve --open</code>으로 열면 버튼이 생깁니다.</span></div>`;
     const last = u
       ? `<div class="section-title">${icon("ok")}마지막 업데이트</div>
-        <p style="margin:0 0 8px"><b>${esc(whenLabel(u.at))}</b> · ${u.trigger === "schedule" ? "자동" : u.trigger === "dashboard" ? "대시보드" : "터미널"} · ${u.durationSec}초${u.ok ? "" : ` · <span class="chip crit">${icon("alert")}일부 실패</span>`}</p>
+        <p style="margin:0 0 8px"><b>${esc(whenLabel(u.at))}</b> · ${u.trigger === "schedule" ? "자동" : u.trigger === "dashboard" ? "대시보드" : "터미널"} · ${u.mode === "deep" ? "전체" : "빠른"} · ${u.durationSec >= 90 ? `${Math.round(u.durationSec / 60)}분` : `${u.durationSec}초`}${u.ok ? "" : ` · <span class="chip crit">${icon("alert")}일부 실패</span>`}</p>
         <ul class="update-steps">${(u.steps || []).map((st) => `<li>${chip({ cls: st.ok ? "good" : "crit", icon: st.ok ? "ok" : "alert" }, st.name)}<span class="muted">${esc(st.detail)}</span></li>`).join("")}</ul>
+        ${u.mode === "deep" && u.summary ? `<div class="callout" style="margin-top:10px">${icon("sparkles")}<span>${esc(u.summary)}</span></div>` : ""}
+        ${u.asks?.length ? `<div class="section-title">${icon("chat")}답해 주실 것 ${u.asks.length}개</div><div class="list">${u.asks.map((a) => `<button class="row-btn list-row" data-item="${esc(a.id)}"><div><div class="t">${esc(a.question)}</div><div class="d">${esc(getModel().checklist.find((i) => i.id === a.id)?.title || a.id)}</div></div></button>`).join("")}</div>` : ""}
+        ${u.changed?.length ? `<div class="section-title">${icon("ok")}이번에 바뀐 값 ${u.changed.length}개</div><div class="list">${u.changed.map((c) => `<button class="row-btn list-row" data-item="${esc(c.id)}"><div><div class="t">${esc(getModel().checklist.find((i) => i.id === c.id)?.title || c.id)}</div><div class="d">${esc(c.what)}</div></div></button>`).join("")}</div>` : ""}
         <div class="section-title">${icon("check")}다시 확인할 값 ${u.recheck?.total ?? 0}개</div>
         ${
           u.recheckItems?.length
@@ -2125,14 +2135,15 @@
             : `<p class="muted">없습니다. 모든 값이 최근에 원본에서 확인됐어요.</p>`
         }`
       : `<p class="muted">아직 업데이트한 적이 없습니다.</p>`;
-    const past = history.length > 1 ? `<div class="section-title">${icon("clock")}기록</div><ul class="history">${history.map((h) => `<li><span class="num">${esc(whenLabel(h.at))}</span><span>${h.trigger === "schedule" ? "자동" : "수동"} · ${esc(h.summary || "")}</span></li>`).join("")}</ul>` : "";
+    const past = history.length > 1 ? `<div class="section-title">${icon("clock")}기록</div><ul class="history">${history.map((h) => `<li><span class="num">${esc(whenLabel(h.at))}</span><span>${h.trigger === "schedule" ? "자동" : "수동"}${h.mode === "deep" ? "·전체" : ""} · ${esc(h.summary || "")}</span></li>`).join("")}</ul>` : "";
     openDrawer({
       kicker: `${icon("refresh")} 업데이트`,
       title: "원본에서 다시 읽기",
       sub: upd.running ? `<span class="chip info">${icon("clock")}업데이트 중</span>` : u ? `마지막 ${esc(whenLabel(u.at))}` : "",
       body: `<div id="update-drawer">${schedule}${action}${last}${past}</div>`,
     });
-    $("#update-run")?.addEventListener("click", startUpdate);
+    $("#update-run")?.addEventListener("click", () => startUpdate(false));
+    $("#update-deep")?.addEventListener("click", () => startUpdate(true));
     hydrateIcons($("#drawer-body"));
   }
 

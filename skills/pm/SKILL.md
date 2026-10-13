@@ -170,15 +170,27 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 
 ### 업데이트와 자동 실행
 
-`pm update`는 사람 없이 돌 수 있는 부분이다. GitHub 이슈·마일스톤 스냅샷을 새로 받고 다시 확인할 값을 계산해 `projects/<id>/update.json`에 남긴다. 원본에는 쓰지 않는다.
+| 업데이트 | 하는 일 | 걸리는 시간 |
+|---|---|---|
+| 빠른 (`pm update`) | GitHub 이슈·마일스톤 스냅샷을 새로 받고 다시 확인할 값을 계산한다 | 몇 초 |
+| 전체 (`pm update --deep`) | 빠른 업데이트에 더해, Claude Code를 headless로 띄워 위 '최신화' 순서대로 GitHub 코멘트·Notion 요청 페이지를 읽고 `pm answer·set·check --src`로 반영한다. 못 찾은 값은 추정으로 두고 '답해 주실 것'(asks)으로 남긴다 | 몇 분 |
+
+결과는 `projects/<id>/update.json`에 남고 대시보드 상단 '업데이트' 창에 보인다. 어느 쪽도 원본(GitHub·Notion)에는 쓰지 않는다. 전체 업데이트의 Claude는 읽기 도구(gh issue/pr view·list, Notion fetch·search·comments, dig, Read)와 이 워크스페이스의 pm CLI만 쓸 수 있고, 나머지 도구는 묻지 않고 거절된다(`--permission-mode dontAsk`). 워크스페이스 설정 `update.allowedTools`로 읽기 도구를 더할 수 있다(예: 사내 시스템 MCP의 조회 도구).
 
 | 방법 | 명령 |
 |---|---|
-| 대시보드 | 상단 '업데이트' → '지금 업데이트' (`pm serve`일 때) |
-| 터미널 | `pm update` (`--all`이면 모든 프로젝트) |
-| 자동 | `pm schedule install` → 매일 08:30 · 12:30 · 18:30 `pm update --all`, 대시보드 서버(127.0.0.1:4477)도 계속 켜 둔다. `--times`로 시각, `--no-serve`로 서버 제외. 상태 `pm schedule`, 끄기 `pm schedule remove` |
+| 대시보드 | 상단 '업데이트' → '빠른 업데이트' 또는 '전체 업데이트' (`pm serve`일 때) |
+| 터미널 | `pm update [--deep]` (`--all`이면 모든 프로젝트) |
+| 자동 | `pm schedule install --deep` → 매일 08:30 · 12:30 · 18:30 전체 업데이트, 대시보드 서버(127.0.0.1:4477)도 계속 켜 둔다. `--times`로 시각, `--no-serve`로 서버 제외, `--deep`을 빼면 빠른 업데이트. 상태 `pm schedule`, 끄기 `pm schedule remove` |
 
-자동 실행은 macOS launchd 사용자 에이전트다(다른 OS는 cron 줄을 보여 준다). 설치 전에 사용자에게 시각과 서버를 켜 둘지 확인한다. 업데이트가 찾은 '다시 확인할 값'을 원본과 대조해 반영하는 일은 위 '최신화' 순서로 사용자와 함께 한다.
+**세팅 (전체 업데이트를 처음 켤 때).** `pm doctor`가 점검하고 빠진 것마다 할 일을 알려 준다. `pm schedule install --deep`도 먼저 점검하고, 빠진 것이 있으면 빠른 업데이트로 켠다.
+
+1. Claude Code 설치·로그인: 이 PC에서 `claude`가 실행되고 로그인돼 있어야 한다.
+2. Notion 연결을 **사용자 범위**로: `claude mcp add --scope user --transport http notion https://mcp.notion.com/mcp` → `claude` 실행 → `/mcp`에서 notion 인증. 특정 폴더(local 범위)에만 등록돼 있으면 PM 워크스페이스에서 돌 때 Notion이 안 보인다.
+3. GitHub: `gh auth login` 또는 `GITHUB_TOKEN`.
+4. 프로젝트마다 `channels.notion.url`(고객 요청 DB 링크)과 항목의 `res.url`이 있어야 Claude가 어디를 읽을지 안다.
+
+자동 실행은 macOS launchd 사용자 에이전트다(다른 OS는 cron 줄을 보여 준다). 설치 전에 사용자에게 시각, 전체·빠른, 서버를 켜 둘지 확인한다. 전체 업데이트는 하루 세 번 Claude 사용량이 든다. 결과의 '답해 주실 것'은 다음 대화에서 사용자에게 한 번에 묻는다.
 
 사용자가 결정을 내리면 `project.json`의 `decisions`에서 빼고 체크리스트·일정에 반영한다. 결정이 필요한 일은 권장안 먼저, 선택지 2~3개, 기한, 정하지 않으면 막히는 것을 적어 `decisions`에 둔다.
 

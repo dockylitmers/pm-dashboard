@@ -9,7 +9,7 @@ import path from "node:path";
 import { BALLS, Core, DATE_RE, openFile, today, UsageError } from "./common.mjs";
 import { dashboardHtml } from "./build.mjs";
 import { scheduleStatus } from "./schedule.mjs";
-import { logDir, PM_SCRIPT, readUpdate, runningUpdate } from "./update.mjs";
+import { claudeBin, logDir, PM_SCRIPT, readUpdate, runningUpdate } from "./update.mjs";
 
 const ITEM_FIELDS = ["status", "ball", "res", "requested", "due", "updated", "receiveAt", "mode", "note", "answer", "answeredAt"];
 
@@ -73,13 +73,13 @@ export function serve(ws, { port = 4477, open = false } = {}) {
 
       if (req.method === "GET" && url.pathname === "/api/update") {
         const last = Object.fromEntries(ws.ids().map((id) => [id, readUpdate(ws, id)?.last || null]));
-        return send(res, 200, { running: runningUpdate(ws), last, schedule: scheduleStatus(ws) });
+        return send(res, 200, { running: runningUpdate(ws), last, schedule: scheduleStatus(ws), deepReady: !!claudeBin() });
       }
       // 업데이트는 별도 프로세스로 돌린다(몇 초~수십 초). 화면은 /api/update를 보며 끝나면 새로 고친다
       if (req.method === "POST" && url.pathname === "/api/update") {
         if (runningUpdate(ws)) return send(res, 409, { error: "busy", running: runningUpdate(ws) });
-        const { project } = await readBody(req);
-        const target = typeof project === "string" && ws.ids().includes(project) ? ["--project", project] : ["--all"];
+        const { project, deep } = await readBody(req);
+        const target = [...(typeof project === "string" && ws.ids().includes(project) ? ["--project", project] : ["--all"]), ...(deep === true ? ["--deep"] : [])];
         fs.mkdirSync(logDir(ws), { recursive: true });
         const out = fs.openSync(path.join(logDir(ws), "update.log"), "a");
         const child = spawn(process.execPath, [PM_SCRIPT, "update", ...target, "--trigger", "dashboard", "--workspace", ws.dir], { cwd: ws.dir, detached: true, stdio: ["ignore", out, out] });

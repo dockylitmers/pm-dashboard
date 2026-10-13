@@ -14,7 +14,7 @@ import { setupRepo, sync } from "./lib/github.mjs";
 import { applyScope, library, newProject } from "./lib/library.mjs";
 import { markSent, serve } from "./lib/server.mjs";
 import { scheduleInstall, scheduleRemove, scheduleStatus } from "./lib/schedule.mjs";
-import { buildModel, readUpdate, refreshReport, runUpdate, runningUpdate } from "./lib/update.mjs";
+import { buildModel, deepCheck, readUpdate, refreshReport, runUpdate, runningUpdate } from "./lib/update.mjs";
 import { locate, registered, setup, Workspace } from "./lib/workspace.mjs";
 
 const commands = {};
@@ -51,10 +51,13 @@ commands.help = () => {
   refresh [--json] [--offline]    다시 확인할 값: 추정 · ${Core.STALE_DAYS}일 넘게 확인 안 함 · 확인 뒤 GitHub 이슈가 바뀜
   check <item...> --src 출처 [--guess] [--note 메모]
                                   값을 원본에서 확인함으로 기록(값이 그대로일 때). --guess는 추정으로 표시
-  update [--all] [--offline]      GitHub 이슈 스냅샷 + 다시 확인할 값 계산, 결과를 대시보드에 표시
+  update [--all] [--deep] [--offline]
+                                  빠른: GitHub 이슈 스냅샷 + 다시 확인할 값. --deep: Claude가 원본(GitHub 코멘트,
+                                  Notion 요청 페이지)을 읽고 이 워크스페이스의 값을 고친다(원본에는 쓰지 않음)
+  doctor                          전체 업데이트에 필요한 것(Claude Code, Notion 연결, GitHub 로그인) 점검
   schedule [status]               자동 업데이트 상태와 프로젝트별 마지막 업데이트
-  schedule install [--times 08:30,12:30,18:30] [--no-serve]
-                                  매일 정해진 시각에 pm update --all (macOS). 대시보드 서버도 계속 켜 둔다
+  schedule install [--times 08:30,12:30,18:30] [--deep] [--no-serve]
+                                  매일 정해진 시각에 pm update --all [--deep] (macOS). 대시보드 서버도 계속 켜 둔다
   schedule remove                 자동 업데이트·서버 끄기
 
 킥오프·현황
@@ -619,14 +622,36 @@ commands.update = async (args) => {
   if (!ids.length) throw new UsageError("등록된 프로젝트가 없습니다. pm init <id>로 만드세요.");
   const trigger = ["schedule", "dashboard", "manual"].includes(args.trigger) ? args.trigger : "manual";
   const stamp = () => localTime(new Date().toISOString());
-  const { busy, results } = await runUpdate(w, ids, { trigger, offline: !!args.offline, log: (line) => console.error(`[${stamp()}] ${line}`) });
+  const deep = !!args.deep;
+  if (deep) {
+    const check = deepCheck(w, { mcp: false });
+    if (!check.ok) throw new UsageError(`전체 업데이트를 할 수 없습니다. pm doctor로 확인하세요: ${check.checks.filter((c) => !c.ok && !c.warn).map((c) => c.name).join(", ")}`);
+  }
+  const { busy, results } = await runUpdate(w, ids, { trigger, deep, offline: !!args.offline, log: (line) => console.error(`[${stamp()}] ${line}`) });
   if (busy) return console.log(`이미 업데이트 중입니다 (${busy.trigger}, ${busy.at} 시작). 끝난 뒤 다시 하세요.`);
   if (args.json) return console.log(JSON.stringify(results, null, 2));
   for (const r of results) {
-    console.log(`${r.id}: ${r.ok ? "업데이트함" : "일부 실패"} · ${r.durationSec}초 · ${r.summary}`);
+    const took = r.durationSec >= 90 ? `${Math.round(r.durationSec / 60)}분` : `${r.durationSec}초`;
+    console.log(`${r.id}: ${r.ok ? "업데이트함" : "일부 실패"} · ${r.mode === "deep" ? "전체" : "빠른"} · ${took}${r.cost != null ? ` · 약 $${r.cost.toFixed(2)}` : ""} · ${r.summary}`);
     for (const s of r.steps) console.log(`  ${s.ok ? "✓" : "✗"} ${s.name}: ${s.detail}`);
+    for (const c of r.changed || []) console.log(`  · 바뀜 ${c.id}: ${c.what}`);
+    for (const a of r.asks || []) console.log(`  ? 물어볼 것 ${a.id}: ${a.question}`);
   }
-  if (results.some((r) => r.recheck.total)) console.log("\n바뀐 값을 반영하려면 Claude에게 \"최신화해 줘\" (pm refresh 목록을 원본과 대조해 기록한다)");
+  if (!deep && results.some((r) => r.recheck.total)) console.log("\n바뀐 값을 반영하려면 pm update --deep(Claude가 원본을 읽고 반영) 또는 Claude에게 \"최신화해 줘\"");
+};
+
+function printChecks(check) {
+  console.log("전체 업데이트 점검");
+  for (const c of check.checks) console.log(`  ${c.ok ? "✓" : c.warn ? "!" : "✗"} ${pad(c.name, 16)}${c.detail}${c.ok ? "" : `\n      할 일: ${c.fix}`}`);
+}
+
+commands.doctor = (args) => {
+  const w = ws(args);
+  console.log(`워크스페이스 ${w.dir} (${w.source}) · 회사 ${w.config.company} · 프로젝트 ${w.ids().join(", ") || "없음"}`);
+  const check = deepCheck(w);
+  printChecks(check);
+  console.log(check.ok ? "\n전체 업데이트를 쓸 수 있습니다: pm update --deep, 자동은 pm schedule install --deep" : "\n'할 일'을 마치면 전체 업데이트(Claude가 원본을 읽고 반영)를 쓸 수 있습니다. 빠른 업데이트(pm update)는 지금도 됩니다.");
+  commands.schedule({ ...args, _: ["status"] });
 };
 
 commands.schedule = (args) => {
@@ -634,15 +659,24 @@ commands.schedule = (args) => {
   const [sub = "status"] = args._;
   if (sub === "install") {
     const times = list(args.times || "08:30,12:30,18:30");
-    const result = scheduleInstall(w, { times, serve: args.serve !== "false" && !args["no-serve"], port: Number(args.port) || 4477 });
+    let deep = !!args.deep;
+    if (deep) {
+      const check = deepCheck(w);
+      printChecks(check);
+      if (!check.ok) {
+        deep = false;
+        console.log("\n전체 업데이트에 필요한 것이 빠져 있어 빠른 업데이트로 켭니다. 위 '할 일'을 마친 뒤 pm schedule install --deep을 다시 하세요.\n");
+      }
+    }
+    const result = scheduleInstall(w, { times, deep, serve: args.serve !== "false" && !args["no-serve"], port: Number(args.port) || 4477 });
     for (const line of result.lines) console.log(line);
     return;
   }
   if (sub === "remove") return console.log(scheduleRemove(w).join("\n"));
-  if (sub !== "status") throw new UsageError("pm schedule [status | install [--times 08:30,12:30,18:30] [--no-serve] | remove]");
+  if (sub !== "status") throw new UsageError("pm schedule [status | install [--times 08:30,12:30,18:30] [--deep] [--no-serve] | remove]");
   const st = scheduleStatus(w);
   if (st.otherWorkspace) console.log(`자동 업데이트: 이 PC에서는 다른 워크스페이스(${st.workspace})에 켜져 있습니다. 여기로 옮기려면 이 워크스페이스에서 pm schedule install`);
-  else console.log(st.installed ? `자동 업데이트: 매일 ${st.times.join(" · ")} (${st.loaded ? "켜짐" : "등록됐지만 꺼짐"})` : "자동 업데이트: 꺼짐 — pm schedule install");
+  else console.log(st.installed ? `자동 업데이트: 매일 ${st.times.join(" · ")} ${st.deep ? "전체" : "빠른"} 업데이트 (${st.loaded ? "켜짐" : "등록됐지만 꺼짐"})` : "자동 업데이트: 꺼짐 — pm schedule install [--deep]");
   if (st.serve) console.log(`대시보드 서버: http://127.0.0.1:${st.serve.port}/ (${st.serve.loaded ? "켜짐" : "등록됐지만 꺼짐"})`);
   if (st.log) console.log(`기록: ${st.log}`);
   const busy = runningUpdate(w);

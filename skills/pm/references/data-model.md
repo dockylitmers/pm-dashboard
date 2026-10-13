@@ -97,9 +97,9 @@ review.status: `unchecked`·`ok`·`risk`·`missing`·`na`. payments.status: `pla
 
 ## update.json
 
-`pm update`(대시보드 버튼, 자동 실행 포함)가 만든다. git에 올리지 않는다. `{ last: { at, trigger(manual·dashboard·schedule), ok, durationSec, steps: [{ name, ok, detail }], recheck: { total, guess, moved, stale }, recheckItems: [{ id, title, kind, github }], summary, error }, history: [{ at, trigger, ok, summary }] }` (기록은 30개까지).
+`pm update`(대시보드 버튼, 자동 실행 포함)가 만든다. git에 올리지 않는다. `{ last: { at, mode(quick·deep), trigger(manual·dashboard·schedule), ok, durationSec, steps: [{ name, ok, detail }], recheck: { total, guess, moved, stale }, recheckItems: [{ id, title, kind, github }], summary, changed: [{ id, what }], asks: [{ id, question }], cost, error }, history: [{ at, mode, trigger, ok, summary }] }` (기록은 30개까지). `changed`·`asks`·`cost`는 전체 업데이트일 때만 채워진다.
 
-자동 실행 설정은 `pm-workspace.json`의 `schedule`(`{ times, serve, installedAt }`)에 남는다.
+`pm-workspace.json`의 설정: `schedule`(`{ times, deep, serve, installedAt }`, 자동 실행), `update`(`{ allowedTools, model, maxBudgetUsd }`, 전체 업데이트에 더할 읽기 도구·모델·비용 한도, 모두 선택).
 
 ## templates/
 

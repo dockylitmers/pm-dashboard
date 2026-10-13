@@ -88,7 +88,7 @@ function parseTimes(times) {
 }
 const hm = ({ Hour, Minute }) => `${String(Hour).padStart(2, "0")}:${String(Minute).padStart(2, "0")}`;
 
-export function scheduleInstall(w, { times, serve = true, port = 4477 }) {
+export function scheduleInstall(w, { times, deep = false, serve = true, port = 4477 }) {
   const slots = parseTimes(times);
   const logs = logDir(w);
   // 분이 모두 같으면 한 줄(30 8,12,18 * * *), 다르면 시각마다 한 줄
@@ -97,7 +97,7 @@ export function scheduleInstall(w, { times, serve = true, port = 4477 }) {
     return {
       lines: [
         "자동 등록은 macOS만 지원합니다. crontab -e에 아래 줄을 넣으세요.",
-        ...cronTimes.map((when) => `${when} node ${PM_SCRIPT} update --all --trigger schedule --workspace ${w.dir} >> ${path.join(logs, "update.log")} 2>&1`),
+        ...cronTimes.map((when) => `${when} node ${PM_SCRIPT} update --all${deep ? " --deep" : ""} --trigger schedule --workspace ${w.dir} >> ${path.join(logs, "update.log")} 2>&1`),
         serve ? `대시보드 서버는 로그인할 때 실행되게 하세요: node ${PM_SCRIPT} serve --workspace ${w.dir} --port ${port}` : "",
       ].filter(Boolean),
     };
@@ -110,7 +110,7 @@ export function scheduleInstall(w, { times, serve = true, port = 4477 }) {
     plistPath(UPDATE_LABEL),
     plist({
       Label: UPDATE_LABEL,
-      ProgramArguments: ["/bin/bash", runner, "update", "--all", "--trigger", "schedule", "--workspace", w.dir],
+      ProgramArguments: ["/bin/bash", runner, "update", "--all", ...(deep ? ["--deep"] : []), "--trigger", "schedule", "--workspace", w.dir],
       StartCalendarInterval: slots,
       EnvironmentVariables: env,
       WorkingDirectory: w.dir,
@@ -119,7 +119,7 @@ export function scheduleInstall(w, { times, serve = true, port = 4477 }) {
     }),
   );
   load(UPDATE_LABEL);
-  const lines = [`자동 업데이트를 켰습니다: 매일 ${slots.map(hm).join(" · ")} (pm update --all)`];
+  const lines = [`자동 업데이트를 켰습니다: 매일 ${slots.map(hm).join(" · ")} ${deep ? "전체 업데이트(pm update --all --deep, Claude가 원본을 읽고 반영)" : "빠른 업데이트(pm update --all)"}`];
   if (serve) {
     fs.writeFileSync(
       plistPath(SERVE_LABEL),
@@ -138,7 +138,7 @@ export function scheduleInstall(w, { times, serve = true, port = 4477 }) {
     lines.push(`대시보드 서버를 켜 두었습니다: http://127.0.0.1:${port}/ (로그인하면 자동으로 켜짐)`);
   }
   lines.push(`기록: ${logs}`, "Mac이 잠자기 중이면 그 시각은 건너뛰고 깨어난 뒤 한 번 실행됩니다. 끄려면 pm schedule remove");
-  w.setConfig({ schedule: { times: slots.map(hm), serve: serve ? { port } : null, installedAt: new Date().toISOString() } });
+  w.setConfig({ schedule: { times: slots.map(hm), deep, serve: serve ? { port } : null, installedAt: new Date().toISOString() } });
   return { lines };
 }
 
@@ -171,8 +171,10 @@ export function scheduleStatus(w) {
   const target = installed ? fs.readFileSync(plistPath(UPDATE_LABEL), "utf8").match(/<string>--workspace<\/string>\s*<string>([^<]+)<\/string>/)?.[1] || null : null;
   const decode = (v) => v?.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
   const workspace = decode(target);
+  const deep = installed ? fs.readFileSync(plistPath(UPDATE_LABEL), "utf8").includes("<string>--deep</string>") : !!config?.deep;
   return {
     installed,
+    deep,
     workspace,
     otherWorkspace: !!workspace && workspace !== w.dir,
     times,
