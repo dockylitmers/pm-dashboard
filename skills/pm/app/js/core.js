@@ -169,9 +169,36 @@
     });
     const current = stages.find((stage) => !stage.complete) || null;
     const devStart = project.dates?.devStart;
-    // 개발 착수 2주 뒤까지 또는 끝나지 않은 단계가 있는 동안 킥오프 화면을 보여 준다
-    const active = !!current || (devStart ? F.daysBetween(devStart, today) < 14 : true);
+    // 킥오프 기간(개발 착수 전)에만 홈에 킥오프 진행을 보여 준다. 착수 뒤 남은 준비 항목은 이번 주 할 일로 챙긴다
+    const active = isDate(devStart) ? today < devStart : !!current;
     return { stages, current, active, completed: stages.filter((s) => s.complete).length };
+  }
+
+  // 지금 단계: 오늘이 들어 있는 phase, 없으면 다음 phase
+  function currentPhase(project, today = F.kstDate(new Date())) {
+    const phases = (project.phases || []).filter((ph) => isDate(ph.start) && isDate(ph.end)).sort((a, b) => a.start.localeCompare(b.start));
+    const now = phases.find((ph) => ph.start <= today && today <= ph.end);
+    if (now) return { ...now, state: "now", dayOf: F.daysBetween(now.start, today) + 1, days: F.daysBetween(now.start, now.end) + 1 };
+    const next = phases.find((ph) => ph.start > today);
+    if (next) return { ...next, state: "next", inDays: F.daysBetween(today, next.start) };
+    return phases.length ? { ...phases.at(-1), state: "done" } : null;
+  }
+
+  // 다음 관문: 오늘 이후 가장 가까운 필요 시점과 그때까지 갖춰야 할 항목
+  function nextGate(project, items, today = F.kstDate(new Date())) {
+    const dates = anchorDates(project.dates, today);
+    const order = ["devStart", "devMid", "devEnd", "qaStart", "storeSubmit", "qaEnd", "launch"];
+    const gates = order
+      .filter((key) => isDate(dates[key]) && dates[key] >= today && (key !== "devMid" || project.dates?.devMid))
+      .map((key) => ({ key, label: ANCHORS[key], date: dates[key] }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (!gates.length) return null;
+    const gate = gates[0];
+    // 그 관문까지 필요한 항목(관문 날짜 이전에 막히는 것 포함)
+    const need = items.filter((i) => i.status !== "not_needed" && i.blocksDate && i.blocksDate <= gate.date);
+    const ready = need.filter((i) => i.status === "confirmed");
+    const open = need.filter((i) => i.status !== "confirmed").sort((a, b) => (a.blocksDate || "").localeCompare(b.blocksDate || ""));
+    return { ...gate, inDays: F.daysBetween(today, gate.date), total: need.length, ready: ready.length, open, after: gates.slice(1, 3) };
   }
 
   // 이번 주(오늘부터 horizon일) 할 일. 요청 시작일이 지난 것부터
@@ -272,13 +299,18 @@
       today,
       checklist: items,
       readiness: readiness(items),
-      waiting: items.filter((item) => item.status === "requested" && item.ball === "client").sort((a, b) => (b.waitDays ?? 0) - (a.waitDays ?? 0)),
+      // 고객사 답 기다림: 막히는 일정이 가까운 것부터(가장 오래된 것이 아니라 가장 급한 것)
+      waiting: items
+        .filter((item) => item.status === "requested" && item.ball === "client")
+        .sort((a, b) => (a.blocksDate || "9999").localeCompare(b.blocksDate || "9999") || (b.waitDays ?? 0) - (a.waitDays ?? 0)),
       missing: items.filter((item) => item.status === "missing"),
       recheck: items
         .filter((item) => item.recheck)
         .sort((a, b) => Number(b.guess) - Number(a.guess) || (a.blocksDate || "9999").localeCompare(b.blocksDate || "9999")),
       health: health(project, forecast, items, today),
       kickoff: kickoff(project, items, today),
+      phase: currentPhase(project, today),
+      gate: nextGate(project, items, today),
       thisWeek: thisWeek(project, items, { today, forecast }),
       sheet: sheet(project, items, today),
       contract: contractSummary(project, today),
@@ -305,10 +337,10 @@
     }
     if (p) {
       const label = `${p.targetLabel}(${F.monthDay(p.target)})`;
-      if (p.status === "on") add(`${label}은 <strong>순항</strong>입니다. 지금 속도면 ${F.shortDate(p.netFinish)}에 남은 일이 끝납니다.`, { view: "schedule" });
+      if (p.status === "on") add(`${label}은 <strong>순항</strong>입니다. 지금 속도면 ${F.shortDate(p.netFinish)}에 남은 이슈가 끝납니다.`, { view: "schedule" });
       else
         add(
-          `${label} <strong>${FORECAST_STATUS[p.status].label}</strong>: 새 이슈가 멈추면 ${F.shortDate(p.expected)} 완료, 지금처럼 주 ${num(p.inflow)}건이 들어오면 ${F.monthDay(p.target)}에 <strong>약 ${num(p.remainingAtTarget)}건</strong>이 남습니다.`,
+          `${label} <strong>${FORECAST_STATUS[p.status].label}</strong>: 지금 속도면 마감에 <strong>약 ${num(p.remainingAtTarget)}건이 남습니다</strong>. 맞추려면 주 ${num(p.requiredVelocity)}건을 닫아야 합니다(지금 ${num(p.velocity)}건).`,
           { view: "schedule" },
         );
     } else if (!ko?.active) {
@@ -316,7 +348,11 @@
     }
     if (waiting.length) {
       const top = waiting[0];
-      add(`고객사 답을 기다리는 항목 <strong>${waiting.length}건</strong>, 가장 오래된 것은 ‘${escHtml(top.title)}’ <strong>D+${top.waitDays}</strong>.`, { view: "requests" });
+      const late = waiting.filter((i) => i.overdue).length;
+      add(
+        `고객사 답 기다림 <strong>${waiting.length}건</strong>${late ? `(기한 지남 ${late}건)` : ""}, 가장 급한 것은 ‘${escHtml(top.title)}’${top.blocks ? ` — ${escHtml(top.blocks)} ${F.monthDay(top.blocksDate)} 전에 필요` : ""}.`,
+        { view: "requests" },
+      );
     }
     const first = week.find((a) => a.type === "request") || (missing[0] && { item: missing[0].id, text: `‘${missing[0].title}’` });
     if (missing.length && first) add(`아직 없는 자료 <strong>${missing.length}건</strong> — 먼저 ${escHtml(first.text)}.`, { view: "kickoff", filter: "missing", item: first.item });
@@ -412,7 +448,8 @@
     }
     if (!project.milestones?.length) project.milestones = dates.launch ? [{ name: "출시", date: dates.launch }] : [];
     if (!project.timeline?.start || !project.timeline?.end) {
-      const known = [...Object.values(dates), ...project.phases.flatMap((p) => [p.start, p.end])].filter(isDate).sort();
+      // 오늘도 넣어 '오늘' 선이 항상 보이게 한다
+      const known = [...Object.values(dates), ...project.phases.flatMap((p) => [p.start, p.end]), today].filter(isDate).sort();
       project.timeline = {
         start: F.addDays(known[0] || today, -7),
         end: F.addDays(known.at(-1) || F.addDays(today, 90), 7),
@@ -446,6 +483,8 @@
     fill,
     checklist,
     readiness,
+    currentPhase,
+    nextGate,
     contractSummary,
     kickoff,
     thisWeek,

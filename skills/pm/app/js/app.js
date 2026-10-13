@@ -518,37 +518,78 @@
   }
 
   // ---------------------------------------------------------------- 화면: 오늘
+  const netWeek = (p) => Math.round(p.velocity) - Math.round(p.inflow);
   function renderOverview(model) {
-    const { project, forecast, readiness, waiting, health } = model;
+    const { project, forecast, waiting, health, phase, gate } = model;
     const p = forecast?.project;
     const items = briefing(model);
-    const launch = project.dates?.launch;
-    const dLaunch = launch ? F.daysBetween(realToday(), launch) : null;
-    const weekly = forecast?.weekly ?? [];
-    const sparkMax = Math.max(
-      1,
-      ...weekly.map((w) => Math.max(w.done, w.created)),
-    );
-    const spark = weekly.length
-      ? `<svg viewBox="0 0 120 34" width="120" height="34" aria-hidden="true">${weekly
-          .map((w, i) => {
-            const h1 = (w.done / sparkMax) * 30;
-            const h2 = (w.created / sparkMax) * 30;
-            const x0 = i * 30 + 4;
-            return `<rect x="${x0}" y="${32 - h1}" width="9" height="${h1}" rx="2" fill="${i === weekly.length - 1 ? "var(--s1)" : "color-mix(in srgb, var(--s1) 45%, transparent)"}"/><rect x="${x0 + 11}" y="${32 - h2}" width="9" height="${h2}" rx="2" fill="${i === weekly.length - 1 ? "var(--s2)" : "color-mix(in srgb, var(--s2) 45%, transparent)"}"/>`;
-          })
-          .join("")}</svg>`
+    const today = realToday();
+    const dd = (date) => {
+      const n = F.daysBetween(today, date);
+      return n === 0 ? "오늘" : n > 0 ? `D-${n}` : `D+${-n}`;
+    };
+
+    // 지금 단계 한 줄: '개발 29/46일째 · SP-05 진행 중'
+    const sprintNow = forecast?.current;
+    const phaseLine = phase
+      ? phase.state === "now"
+        ? `${phase.name} ${phase.dayOf}/${phase.days}일째${sprintNow ? ` · ${sprintNow.title.split(" ")[0]} 진행 중` : ""}`
+        : phase.state === "next"
+          ? `${phase.name} ${F.monthDay(phase.start)} 시작 (${dd(phase.start)})`
+          : "모든 단계 끝"
       : "";
 
-    const hero = p
-      ? `<div class="hero-label">${esc(p.targetLabel)}(${F.monthDay(p.target)})에 남을 이슈</div>
-         <div class="hero-value num">~${fmt(p.remainingAtTarget)}<small>건</small></div>
-         <div class="hero-note">지금처럼 주 ${fmt(p.inflow)}건이 새로 들어오고 ${fmt(p.velocity)}건을 닫으면. 새 이슈가 멈추면 <b>${F.shortDate(p.expected)}</b>에 끝납니다.</div>
-         <div style="margin-top:12px">${chip(FORECAST_STATUS[p.status], `예측 ${FORECAST_STATUS[p.status].label}`)} <button class="link-btn" data-go="schedule" style="margin-left:8px">일정·속도 보기 →</button></div>`
-      : `<div class="hero-label">킥오프 준비율</div>
-         <div class="hero-value num">${readiness.percent}<small>%</small></div>
-         <div class="hero-note">${readiness.ready}/${readiness.total}개 항목 확정. 없는 자료부터 요청하면 개발 착수일을 지킬 수 있어요.</div>
-         <div style="margin-top:12px"><button class="link-btn" data-go="kickoff">체크리스트 보기 →</button></div>`;
+    // 개발 마감 예측: 결론 한 문장 + 이유 세 줄
+    let verdict;
+    if (p) {
+      // 보이는 숫자끼리 맞도록 반올림한 값으로 뺀다(126 − 123 = 3)
+      const net = Math.round(p.velocity) - Math.round(p.inflow);
+      const st = FORECAST_STATUS[p.status];
+      const gap = p.requiredVelocity ? p.requiredVelocity - p.velocity : 0;
+      const head =
+        p.status === "on"
+          ? `마감 전에 끝나요 · ${F.monthDay(p.netFinish)} 예상`
+          : p.remainingAtTarget > 0
+            ? `마감에 약 ${fmt(p.remainingAtTarget)}건이 남아요`
+            : `빠듯해요 · 새 이슈가 줄어야 맞춰요`;
+      const max = Math.max(p.remaining, p.remainingAtTarget, 1);
+      verdict = `<div class="hero-label">${esc(p.targetLabel)} 예측 · ${F.monthDay(p.target)} (${dd(p.target)})</div>
+        <div class="verdict">${chip(st)}<b>${esc(head)}</b></div>
+        <div class="vbars" aria-hidden="true">
+          <div><span>오늘 남은 이슈</span><i style="width:${(p.remaining / max) * 100}%"></i><b class="num">${fmt(p.remaining)}</b></div>
+          <div><span>마감 때 남을 이슈</span><i class="${p.remainingAtTarget ? "warn" : "good"}" style="width:${Math.max(2, (p.remainingAtTarget / max) * 100)}%"></i><b class="num">${p.remainingAtTarget ? `~${fmt(p.remainingAtTarget)}` : "0"}</b></div>
+        </div>
+        <ul class="why">
+          <li>매주 ${fmt(p.velocity)}건을 닫고 ${fmt(p.inflow)}건이 새로 생겨, ${net > 0 ? `실제로는 주 ${fmt(net)}건씩 줄어요` : net < 0 ? `오히려 주 ${fmt(-net)}건씩 늘어요` : "남은 이슈가 줄지 않아요"}</li>
+          ${p.status !== "on" && p.requiredVelocity ? `<li>맞추려면 주 ${fmt(p.requiredVelocity)}건(지금보다 ${fmt(gap)}건 더)을 닫거나 범위를 줄여야 해요</li>` : ""}
+          <li>새 이슈가 더 생기지 않으면 ${F.monthDay(p.expected)}에 끝나요</li>
+        </ul>
+        <button class="link-btn" data-go="schedule" data-anchor="velocity">일정·속도에서 자세히 →</button>`;
+    } else if (gate) {
+      verdict = `<div class="hero-label">${esc(gate.label)} 준비 · ${F.monthDay(gate.date)} (${dd(gate.date)})</div>
+        <div class="hero-value num">${gate.ready}<small> / ${gate.total} 확정</small></div>
+        <div class="hero-note">${gate.open.length ? `남은 것 ${gate.open.length}건 — 먼저 ‘${esc(gate.open[0].title)}’` : "필요한 자료가 모두 확정됐어요"}. 일정 예측은 이슈 트래커를 연결하면 시작됩니다.</div>
+        <div style="margin-top:12px"><button class="link-btn" data-go="kickoff">체크리스트 보기 →</button></div>`;
+    } else verdict = `<div class="hero-label">일정 예측</div><div class="hero-note">일정과 이슈 트래커를 연결하면 마감 예측이 나옵니다.</div>`;
+
+    // 지표 네 칸: 다음 관문 · 남은 이슈 · 관문 준비 · 고객사 답 기다림
+    const lateOpen = gate ? gate.open.filter((i) => i.blocksDate < today).length : 0;
+    const waitLate = waiting.filter((i) => i.overdue).length;
+    const tiles = [
+      gate
+        ? `<div class="card stat"><div class="stat-label"><span>다음 관문</span>${icon("flag")}</div><div class="stat-value num">${dd(gate.date)}</div><div class="stat-note">${esc(gate.label)} ${F.monthDay(gate.date)}${gate.after.length ? ` · 다음 ${gate.after.map((g) => `${esc(g.label)} ${F.monthDay(g.date)}`).join(", ")}` : ""}</div></div>`
+        : `<div class="card stat"><div class="stat-label"><span>다음 관문</span>${icon("flag")}</div><div class="stat-value">-</div><div class="stat-note">일정(개발·QA·출시 날짜)을 넣으면 보입니다</div></div>`,
+      p
+        ? `<div class="card stat" data-internal><div class="stat-label"><span>남은 이슈</span>${icon("list")}</div><div class="stat-value num">${fmt(p.remaining)}<small>건</small></div><div class="stat-note">주 평균 ${fmt(p.velocity)}건 닫고 ${fmt(p.inflow)}건 새로 생김 → ${netWeek(p) > 0 ? `주 ${netWeek(p)}건씩 줄어듦` : netWeek(p) < 0 ? `주 ${-netWeek(p)}건씩 늘어남` : "줄지 않음"}</div></div>`
+        : model.kickoff.active
+          ? `<div class="card stat" data-internal><div class="stat-label"><span>킥오프 단계</span>${icon("list")}</div><div class="stat-value num">${model.kickoff.completed}<small> / ${model.kickoff.stages.length} 끝남</small></div><div class="stat-note">${model.kickoff.current ? `지금 ‘${esc(model.kickoff.current.name)}’ ${model.kickoff.current.done}/${model.kickoff.current.total}` : "모든 단계 끝"}</div></div>`
+          : `<div class="card stat" data-internal><div class="stat-label"><span>남은 이슈</span>${icon("list")}</div><div class="stat-value">-</div><div class="stat-note">이슈 트래커를 연결하면 남은 이슈와 속도가 보입니다</div></div>`,
+      // 예측이 없으면 오른쪽 위 카드가 관문 준비를 보여 주므로, 여기서는 고객사 요청을 얼마나 보냈는지 본다
+      p && gate
+        ? `<div class="card stat"><div class="stat-label"><span>${esc(gate.label)} 전 준비</span>${icon("check")}</div><div class="stat-value num">${gate.ready}<small> / ${gate.total} 확정</small></div><div class="meter" aria-hidden="true"><span style="width:${gate.total ? (gate.ready / gate.total) * 100 : 100}%;background:var(--good)"></span></div><div class="stat-note">${gate.open.length ? `${lateOpen ? `늦은 것 ${lateOpen}건 · ` : ""}먼저 ‘${esc((gate.open.find((i) => !i.guess) || gate.open[0]).title)}’` : "모두 확정"}</div></div>`
+        : `<div class="card stat"><div class="stat-label"><span>고객사 요청 보냄</span>${icon("send")}</div><div class="stat-value num">${model.sheet.stats.sent}<small> / ${model.sheet.stats.total}</small></div><div class="meter" aria-hidden="true"><span style="width:${model.sheet.stats.total ? (model.sheet.stats.sent / model.sheet.stats.total) * 100 : 0}%;background:var(--accent)"></span></div><div class="stat-note">${model.sheet.pending.length ? `아직 안 보낸 것 ${model.sheet.pending.length}건 · 답 받은 것 ${model.sheet.stats.answered}건` : `모두 보냄 · 답 받은 것 ${model.sheet.stats.answered}건`}</div></div>`,
+      `<div class="card stat"><div class="stat-label"><span>고객사 답 기다림</span>${icon("clock")}</div><div class="stat-value num">${waiting.length}<small>건${waitLate ? ` · 기한 지남 ${waitLate}` : ""}</small></div><div class="stat-note">${waiting[0] ? `가장 급한 것 ‘${esc(waiting[0].title)}’${waiting[0].blocks ? ` · ${esc(waiting[0].blocks)} ${F.monthDay(waiting[0].blocksDate)} 전 필요` : ""}` : "기다리는 답 없음"}</div></div>`,
+    ].join("");
 
     const decisions = project.decisions?.length
       ? project.decisions
@@ -561,37 +602,35 @@
 
     const waitingHtml = waiting.length
       ? waiting
-          .slice(0, 5)
+          .slice(0, 6)
           .map(
             (item) =>
-              `<button class="row-btn list-row" data-item="${esc(item.id)}"><div><div class="t">${esc(item.title)}</div><div class="d">${esc(item.res?.label || "받을 곳 미정")}${item.blocks ? ` · ${esc(item.blocks)}` : ""}</div></div><span class="wait ${item.overdue ? "late" : ""} num">D+${item.waitDays}</span></button>`,
+              `<button class="row-btn list-row" data-item="${esc(item.id)}"><div><div class="t">${esc(item.title)}</div><div class="d">${item.blocks ? `${esc(item.blocks)} ${F.monthDay(item.blocksDate)} 전에 필요` : "막는 일정 없음"}${item.requested ? ` · ${F.monthDay(item.requested)} 요청` : ""}</div></div><span class="wait ${item.overdue ? "late" : ""} num">D+${item.waitDays}</span></button>`,
           )
           .join("")
-      : `<div class="empty"><b>고객사 대기 없음</b>요청한 자료가 모두 들어왔어요.</div>`;
+      : `<div class="empty"><b>고객사 답 기다림 없음</b>요청한 자료가 모두 들어왔어요.</div>`;
 
     let sprintHtml = `<div class="empty"><b>진행 중인 스프린트가 없어요</b>이슈 트래커를 연결하면 표시됩니다.</div>`;
     if (forecast?.current) {
       const v = forecast.current;
-      const s = forecast.sprint;
+      const sp = forecast.sprint;
       const late = forecast.views.filter((view) => view.isLate);
       // 고객사 공유본에는 이슈가 없어 속도를 계산하지 않는다
       const statusLine = CLIENT
         ? ""
-        : s?.pace != null
-          ? s.finish
-            ? `하루 ${s.pace.toFixed(1)}건 → ${F.shortDate(s.finish)} 완료 예상`
-            : `하루 ${s.pace.toFixed(1)}건 → 약 ${s.carryover}건이 다음 스프린트로`
+        : sp?.pace != null
+          ? sp.finish
+            ? `하루 ${sp.pace.toFixed(1)}건 → ${F.shortDate(sp.finish)} 완료 예상`
+            : `하루 ${sp.pace.toFixed(1)}건 → 약 ${sp.carryover}건이 다음 스프린트로`
           : v.start > forecast.today
-            ? `${F.shortDate(v.start)} 시작 · ${s?.total ?? v.total}건 계획`
+            ? `${F.shortDate(v.start)} 시작 · ${sp?.total ?? v.total}건 계획`
             : "첫 근무일이 지나면 예측이 시작됩니다";
       sprintHtml = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b>${esc(v.title)}</b><span class="muted num">${v.closed}/${v.total}</span></div>
         <div class="meter"><span style="width:${v.percent}%;background:var(--accent)"></span></div>
         <div class="stat-note" style="margin-top:6px">${esc(statusLine)}</div>
         ${late.map((view) => `<div class="callout warn" style="margin-top:12px">${icon("alert")}<span><b>${esc(view.title.split(" ")[0])}</b> 마감(${F.monthDay(view.due)})이 지났고 ${view.open}건이 열려 있습니다.</span></div>`).join("")}
         <div class="bar-list" style="margin-top:14px">${forecast.views
-          .filter(
-            (view) => view.isSprint && view.due >= forecast.today && view !== v,
-          )
+          .filter((view) => view.isSprint && view.due >= forecast.today && view !== v)
           .slice(0, 2)
           .map(
             (view) =>
@@ -601,37 +640,90 @@
     }
 
     return `
-      <div class="view-head"><div><h1>오늘</h1><p>${esc(project.name)} · ${esc(project.summary)}</p></div></div>
+      <div class="view-head"><div><h1>오늘</h1><p>${esc(project.name)}${phaseLine ? ` · <b>${esc(phaseLine)}</b>` : ""}</p></div></div>
       <div class="grid g-12">
         <section class="card brief span-8" data-internal>
           <div class="brief-limi">${limiSvg({ size: 92, mood: health.key, progress: progressOf(model) })}</div>
           <div>
-            <div class="when">리미의 브리핑 · ${F.shortDate(realToday())}${forecast ? ` · GitHub ${esc(syncLabel(forecast.syncedAt))} 기준` : ""}</div>
+            <div class="when">리미의 브리핑 · ${F.shortDate(today)}${forecast ? ` · GitHub ${esc(syncLabel(forecast.syncedAt))} 기준` : ""}</div>
             <h2>${esc(project.name)} · 지금 상태 ${chip(health)}</h2>
             <ol>${items.map((item, i) => `<li><button class="row-btn" data-brief="${i}" style="font-size:14px">${item.text}</button></li>`).join("")}</ol>
-            <div class="btn-row">
-              <button class="btn primary" data-open-limi>${icon("chat")}리미와 대화</button>
-              ${model.missing.length ? `<button class="btn" data-go="kickoff" data-filter="missing">${icon("send")}없는 자료 요청하기</button>` : ""}
-            </div>
+            <div class="btn-row"><button class="btn primary" data-open-limi>${icon("chat")}리미와 대화</button></div>
           </div>
         </section>
-        <section class="card hero span-4" ${p ? "data-internal" : ""}>${hero}</section>
-        <div class="stats span-12">
-          <div class="card stat"><div class="stat-label"><span>출시까지</span>${icon("flag")}</div><div class="stat-value num">${dLaunch == null ? "미정" : `D-${dLaunch}`}</div><div class="stat-note">${launch ? `${F.shortDate(launch)} 출시` : "출시일 미정"}${project.dates?.qaStart ? ` · 고객사 QA ${F.monthDay(project.dates.qaStart)}~${F.monthDay(project.dates.qaEnd)}` : ""}</div></div>
-          <div class="card stat" data-internal><div class="stat-label"><span>주간 처리 / 유입</span>${spark}</div><div class="stat-value num">${p ? `${fmt(p.velocity)} <small>/ ${fmt(p.inflow)}건</small>` : "-"}</div><div class="stat-note">${p ? (p.velocity >= p.inflow ? "닫는 속도가 더 빠릅니다" : `유입이 ${fmt(p.inflow - p.velocity)}건 더 많습니다 · 최근 4주 가중 평균`) : "이슈 트래커 연결 전"}</div></div>
-          <div class="card stat"><div class="stat-label"><span>킥오프 준비</span>${icon("check")}</div><div class="stat-value num">${readiness.ready}<small> / ${readiness.total} 확정</small></div><div class="meter" aria-hidden="true"><span style="width:${readiness.percent}%;background:var(--good)"></span></div></div>
-          <div class="card stat"><div class="stat-label"><span>고객사 대기</span>${icon("clock")}</div><div class="stat-value num">${waiting.length}<small>건</small></div><div class="stat-note">${waiting[0] ? `가장 오래된 것 D+${waiting[0].waitDays} · ${esc(waiting[0].title)}` : "기다리는 자료 없음"}</div></div>
-        </div>
-        ${model.kickoff.active ? `<section class="card span-12" data-internal><div class="card-head"><h2>킥오프 진행 ${model.kickoff.completed}/${model.kickoff.stages.length}</h2><button class="link-btn" data-go="kickoff">킥오프 화면 →</button></div>${stepperHtml(model)}<h3 style="font-size:13px;margin:16px 0 6px">이번 주 할 일</h3>${weekHtml(model, 5)}</section>` : ""}
-        <section class="card span-12">
-          <div class="card-head"><h2>전체 일정</h2><span class="sub">${F.shortDate(project.timeline.start)} ~ ${F.shortDate(project.timeline.end)}</span></div>
+        <section class="card hero span-4" data-internal>${verdict}</section>
+        <div class="stats span-12">${tiles}</div>
+        ${model.kickoff.active ? `<section class="card span-12" data-internal><div class="card-head"><div class="ch-title"><h2>킥오프 진행 ${model.kickoff.completed}/${model.kickoff.stages.length}</h2><span class="sub">개발 착수${project.dates?.devStart ? ` ${F.monthDay(project.dates.devStart)}` : ""} 전까지 보입니다</span></div><button class="link-btn" data-go="kickoff">킥오프 화면 →</button></div>${stepperHtml(model)}</section>` : ""}
+        <section class="card span-7" data-internal><div class="card-head"><div class="ch-title"><h2>이번 주 할 일</h2><span class="sub">늦은 것부터</span></div>${model.thisWeek.length > 6 ? `<button class="link-btn" data-week-all>전체 ${model.thisWeek.length}개 →</button>` : ""}</div>${todoHtml(model, 6)}</section>
+        <section class="card span-5 client-span"><div class="card-head"><div class="ch-title"><h2>고객사 답 기다림</h2><span class="sub">급한 것부터</span></div><button class="link-btn" data-go="requests">전체 →</button></div><div class="list">${waitingHtml}</div></section>
+        <section class="card span-12 tl-card">
+          <div class="card-head"><div class="ch-title"><h2>전체 일정</h2><span class="sub">${F.shortDate(project.timeline.start)} ~ ${F.shortDate(project.timeline.end)}</span></div><button class="link-btn" data-go="schedule" data-anchor="schedule-detail" data-internal>자세히 보기 →</button></div>
           ${timelineHtml(model)}
         </section>
-        <section class="card span-4" id="decisions" data-internal><div class="card-head"><h2>결정 필요</h2><span class="sub">권장안 먼저</span></div><div class="list">${decisions}</div></section>
-        <section class="card span-4 client-span"><div class="card-head"><h2>고객사 답 대기</h2><button class="link-btn" data-go="kickoff" data-filter="requested">전체 →</button></div><div class="list">${waitingHtml}</div></section>
-        <section class="card span-4 client-span"><div class="card-head"><h2>이번 스프린트</h2>${!CLIENT && forecast?.sprint?.status ? chip(FORECAST_STATUS[forecast.sprint.status]) : ""}</div>${sprintHtml}</section>
+        <section class="card span-6" id="decisions" data-internal><div class="card-head"><h2>결정 필요</h2><span class="sub">권장안 먼저</span></div><div class="list">${decisions}</div></section>
+        <section class="card span-6 client-span"><div class="card-head"><h2>이번 스프린트</h2>${!CLIENT && forecast?.sprint?.status ? chip(FORECAST_STATUS[forecast.sprint.status]) : ""}</div>${sprintHtml}</section>
         ${risksHtml(project)}
       </div>`;
+  }
+
+  // 이번 주 할 일: 업데이트가 물어본 것 + 체크리스트·계약·스프린트에서 나온 할 일. 늦은 것부터
+  const TODO_KIND = { request: "요청", remind: "리마인드", prepare: "준비", review: "검토", contract: "계약", "setup-repo": "세팅", sprint: "스프린트", recheck: "다시 확인" };
+  function todoRows(model) {
+    const asks = SERVER || !CLIENT ? lastUpdate()?.asks || [] : [];
+    const rows = [];
+    if (asks.length) rows.push({ type: "asks", late: false, text: `업데이트가 물어본 것 ${asks.length}개에 답하기`, date: lastUpdate().at.slice(0, 10) });
+    for (const a of model.thisWeek) rows.push(a);
+    return rows.sort((a, b) => Number(b.late) - Number(a.late) || Number(b.type === "asks") - Number(a.type === "asks") || (a.date || "").localeCompare(b.date || ""));
+  }
+  function todoHtml(model, limit) {
+    const rows = todoRows(model);
+    if (!rows.length) return '<div class="empty"><b>이번 주 할 일이 없어요</b>요청한 자료의 회신을 기다리는 중입니다.</div>';
+    return `<div class="list">${rows
+      .slice(0, limit)
+      .map((a) => {
+        const target = a.type === "asks" ? "data-update-open" : a.item ? `data-item="${esc(a.item)}"` : a.type === "contract" ? 'data-go="kickoff" data-anchor="contract"' : a.type === "sprint" ? 'data-go="schedule" data-anchor="schedule-detail"' : a.type === "recheck" ? 'data-go="kickoff" data-filter="recheck"' : "";
+        const kind = a.type === "asks" ? "답하기" : TODO_KIND[a.type] || "";
+        return `<button class="row-btn list-row" ${target}><div><div class="t">${a.late ? `<span class="chip crit" style="margin-right:6px">${icon("alert")}늦음</span>` : ""}${esc(a.text)}</div></div><span class="muted" style="font-size:12px;white-space:nowrap">${esc(kind)}${a.date ? ` · ${F.monthDay(a.date)}` : ""}</span></button>`;
+      })
+      .join("")}${rows.length > limit ? `<div class="card-foot"><button class="link-btn" data-week-all>외 ${rows.length - limit}개 모두 보기</button></div>` : ""}</div>`;
+  }
+  function openWeekDrawer() {
+    const model = getModel();
+    const rows = todoRows(model);
+    const late = rows.filter((r) => r.late).length;
+    openDrawer({ kicker: `${icon("check")} 할 일`, title: "이번 주 할 일", sub: `${rows.length}개${late ? ` · 늦음 ${late}` : ""}`, body: todoHtml(model, rows.length) });
+    hydrateIcons($("#drawer-body"));
+  }
+
+  // 자세한 일정 표: 단계 · 주요 일정 · 스프린트
+  function scheduleTableHtml(model) {
+    const { project, forecast } = model;
+    const today = realToday();
+    const dd = (date) => {
+      const n = F.daysBetween(today, date);
+      return n === 0 ? "오늘" : n > 0 ? `D-${n}` : `${-n}일 전`;
+    };
+    const state = (start, end) => (end < today ? chip({ cls: "neutral", icon: "ok" }, "끝남") : start <= today ? chip({ cls: "info", icon: "clock" }, "진행 중") : chip({ cls: "neutral", icon: "minus" }, "예정"));
+    const rows = [];
+    rows.push(`<tr class="grp"><th colspan="5">단계</th></tr>`);
+    for (const ph of project.phases || [])
+      rows.push(`<tr><td>${esc(ph.name)}</td><td class="num">${F.monthDay(ph.start)} ~ ${F.monthDay(ph.end)}</td><td class="num">${F.daysBetween(ph.start, ph.end) + 1}일</td><td>${state(ph.start, ph.end)}</td><td class="num muted">${ph.start <= today && today <= ph.end ? `${F.daysBetween(ph.start, today) + 1}일째 · 끝까지 ${dd(ph.end)}` : ph.start > today ? `시작 ${dd(ph.start)}` : ""}</td></tr>`);
+    if (project.milestones?.length) {
+      rows.push(`<tr class="grp"><th colspan="5">주요 일정</th></tr>`);
+      for (const m of project.milestones) rows.push(`<tr><td>${esc(m.name)}</td><td class="num">${F.shortDate(m.date)}</td><td></td><td>${m.date < today ? chip({ cls: "neutral", icon: "ok" }, "지남") : chip({ cls: "neutral", icon: "flag" }, dd(m.date))}</td><td></td></tr>`);
+    }
+    const sprints = forecast?.views?.filter((v) => v.isSprint) || [];
+    if (sprints.length) {
+      rows.push(`<tr class="grp"><th colspan="5">스프린트 (GitHub 마일스톤)</th></tr>`);
+      for (const v of sprints) {
+        const cur = v === forecast.current;
+        const sp = forecast.sprint;
+        const note = v.isLate ? `마감 지남 · ${v.open}건 열림` : cur && sp?.pace != null ? (sp.finish ? `하루 ${sp.pace.toFixed(1)}건 → ${F.monthDay(sp.finish)} 완료 예상` : `약 ${sp.carryover}건이 다음으로 넘어감`) : "";
+        const st = v.isLate ? chip({ cls: "crit", icon: "alert" }, "늦음") : v.start && v.due ? state(v.start, v.due) : "";
+        rows.push(`<tr${cur ? ' class="cur"' : ""}><td>${esc(v.title.split(" ")[0])}</td><td class="num">${v.start ? `${F.monthDay(v.start)} ~ ` : ""}${v.due ? F.monthDay(v.due) : ""}</td><td><span class="trackbar" style="display:inline-block;width:80px;vertical-align:middle"><span style="width:${v.percent}%;background:var(--accent)"></span></span> <span class="num">${v.closed}/${v.total}</span></td><td>${st}</td><td class="muted">${esc(note)}</td></tr>`);
+      }
+    }
+    return `<div style="overflow-x:auto"><table class="sched-table"><thead><tr><th>이름</th><th>기간·날짜</th><th>길이·진행</th><th>상태</th><th>참고</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
   }
 
   function risksHtml(project) {
@@ -1452,7 +1544,7 @@
     const base = model.forecast;
     if (!base?.project) {
       return `<div class="view-head"><div><h1>일정·속도</h1><p>${esc(project.name)}</p></div></div>
-        <section class="card" style="margin-bottom:16px"><div class="card-head"><h2>계획 일정</h2></div>${timelineHtml(model)}</section>
+        <section class="card" id="schedule-detail" style="margin-bottom:16px"><div class="card-head"><h2>계획 일정</h2></div>${timelineHtml(model)}${scheduleTableHtml(model)}</section>
         <section class="card"><div class="empty"><b>이슈 트래커가 아직 연결되지 않았어요</b>개발 이슈가 쌓이면 처리·유입 속도로 완료일을 예측합니다.<br/>GitHub 저장소를 정한 뒤 project.json의 github.repo에 저장소(owner/repo)를 적고 <code>pm sync --project ${esc(project.id)}</code>를 실행하세요.</div></section>`;
     }
     const s = state.scenario;
@@ -1474,12 +1566,18 @@
         <div><h1>일정·속도</h1><p>GitHub 이슈 ${fmt(f.issues.length)}건 · ${esc(syncLabel(f.syncedAt))} 동기화 · 최근 4주 가중 평균, 낙관·비관 ±40%</p></div>
         <div>${chip(st, `${p.targetLabel} 예측 ${st.label}`)}</div>
       </div>
+      <section class="card" id="schedule-detail" style="margin-bottom:16px">
+        <div class="card-head"><h2>일정</h2><span class="sub">단계 · 주요 일정 · 스프린트</span></div>
+        ${timelineHtml(model)}
+        ${scheduleTableHtml(model)}
+      </section>
+      <h2 class="section-h" id="velocity">속도와 완료 예측</h2>
       <div class="forecast-strip">
         <div><div class="k">새 이슈가 멈추면 완료</div><div class="v num">${F.shortDate(p.expected)}</div>
           <div class="range" aria-label="${esc(`낙관 ${F.shortDate(p.optimistic)}, 비관 ${F.shortDate(p.pessimistic)}, 목표 ${F.shortDate(p.target)}`)}"><span class="track"></span><span class="band" style="left:${rx(p.optimistic)};width:calc(${rx(p.pessimistic)} - ${rx(p.optimistic)})"></span><span class="tgt" style="left:${rx(p.target)}" title="목표"></span><span class="pt" style="left:${rx(p.expected)}"></span></div>
           <div class="s">낙관 ${F.monthDay(p.optimistic)} · 비관 ${F.monthDay(p.pessimistic)} · 검은 선 목표 ${F.monthDay(p.target)}</div></div>
-        <div><div class="k">지금 추세면 ${F.monthDay(p.target)}에 남는 이슈</div><div class="v num">~${fmt(p.remainingAtTarget)}건</div><div class="s">${p.netFinish ? `유입까지 감안한 완료 ${F.shortDate(p.netFinish)}` : "유입이 처리보다 많아 끝나는 날을 계산할 수 없음"}</div></div>
-        <div><div class="k">주간 처리 / 유입</div><div class="v num">${fmt(p.velocity)} / ${fmt(p.inflow)}건</div><div class="s">최근 ${p.weeks}주 가중 평균 · 남은 이슈 ${fmt(p.remaining)}건</div></div>
+        <div><div class="k">지금 속도면 마감(${F.monthDay(p.target)})에 남을 이슈</div><div class="v num">~${fmt(p.remainingAtTarget)}건</div><div class="s">${p.netFinish ? `유입까지 감안한 완료 ${F.shortDate(p.netFinish)}` : "유입이 처리보다 많아 끝나는 날을 계산할 수 없음"}</div></div>
+        <div><div class="k">주마다 닫음 · 새로 생김</div><div class="v num">${fmt(p.velocity)} · ${fmt(p.inflow)}건</div><div class="s">${netWeek(p) > 0 ? `주 ${netWeek(p)}건씩 줄어듦` : netWeek(p) < 0 ? `주 ${-netWeek(p)}건씩 늘어남` : "줄지 않음"} · 최근 ${p.weeks}주 가중 평균 · 남은 이슈 ${fmt(p.remaining)}건</div></div>
         <div><div class="k">${F.monthDay(p.target)}에 맞추려면</div><div class="v num">주 ${fmt(p.requiredVelocity)}건</div><div class="s">${gap > 0 ? `지금보다 주 ${fmt(gap)}건(${fmt((gap / p.velocity) * 100)}%) 더 닫거나 범위를 줄여야 함` : "지금 속도로 충분"}</div></div>
       </div>
       <div class="grid g-12">
@@ -2218,6 +2316,8 @@
     const t = event.target.closest("button, tr[data-item], tr[data-answer], [data-item]");
     if (!t) return;
     if (t.matches(".nav-btn")) return navigate(t.dataset.view);
+    if (t.hasAttribute("data-week-all")) return openWeekDrawer();
+    if (t.hasAttribute("data-update-open")) return openUpdateDrawer();
     if (t.dataset.go)
       return navigate(t.dataset.go, { filter: t.dataset.filter, anchor: t.dataset.anchor });
     if (t.dataset.item) return openItem(t.dataset.item);

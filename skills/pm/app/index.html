@@ -185,6 +185,24 @@
   #update-btn.running svg.icon { animation: pm-spin 1s linear infinite; }
   @keyframes pm-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { #update-btn.running svg.icon { animation: none; } }
+  .verdict { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 12px; font-size: 18px; line-height: 1.35; }
+  .vbars { display: grid; gap: 6px; margin-bottom: 12px; }
+  .vbars > div { display: grid; grid-template-columns: 96px minmax(0, 1fr) 40px; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-3); }
+  .vbars i { display: block; height: 8px; border-radius: 4px; background: var(--s1); }
+  .vbars i.warn { background: var(--s2); }
+  .vbars i.good { background: var(--good); }
+  .vbars b { text-align: right; color: var(--ink); font-size: 13px; }
+  .why { margin: 0 0 12px; padding-left: 18px; font-size: 13px; color: var(--ink-2); display: grid; gap: 4px; }
+  .section-h { font-size: 15px; margin: 24px 0 12px; }
+  .ch-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex-wrap: wrap; }
+  .sched-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+  .sched-table th, .sched-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .sched-table thead th { font-size: 12px; color: var(--ink-3); font-weight: 600; }
+  .sched-table tr.grp th { background: var(--surface-sunk); font-size: 12px; color: var(--ink-2); font-weight: 700; padding-top: 10px; }
+  .sched-table tr.cur td { background: var(--accent-wash); }
+  .sched-table td.muted { color: var(--ink-3); font-size: 12px; }
+  .sched-table .trackbar { height: 8px; background: var(--surface-sunk); border-radius: 4px; overflow: hidden; }
+  .sched-table .trackbar span { display: block; height: 100%; border-radius: 4px; }
   .update-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
   .update-steps li { display: flex; gap: 8px; align-items: baseline; }
   .meta-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); padding: 4px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); white-space: nowrap; }
@@ -575,6 +593,9 @@
   body.client-only #client-view-btn, body.client-only .client-banner { display: none; }
   body.no-projects .project-switch, body.no-projects #dday, body.no-projects #health-chip, body.no-projects #queue-btn, body.no-projects #update-btn, body.no-projects #client-view-btn, body.no-projects .limi-fab, body.no-projects .nav-btn, body.no-projects .nav-label { display: none; }
   body.client-view .client-span { grid-column: span 6; }
+  body.client-view .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* 공유 보기에서는 고객사 답 기다림과 스프린트를 나란히 두고 전체 일정은 아래로 */
+  body.client-view .tl-card { order: 10; }
 
   /* ---------- 반응형 ---------- */
   @media (max-width: 1180px) {
