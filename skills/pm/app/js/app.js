@@ -574,24 +574,17 @@
         <div style="margin-top:12px"><button class="link-btn" data-go="kickoff">체크리스트 보기 →</button></div>`;
     } else verdict = `<div class="hero-label">일정 예측</div><div class="hero-note">일정과 이슈 트래커를 연결하면 마감 예측이 나옵니다.</div>`;
 
-    // 지표 네 칸: 다음 관문 · 남은 이슈 · 관문 준비 · 고객사 답 기다림
-    const lateOpen = gate ? gate.open.filter((i) => i.blocksDate < today).length : 0;
+    // 지금 상태의 주요 지표 한 줄: 다음 관문 · 남은 이슈 · 다음 관문 전 준비 · 고객사 답
     const waitLate = waiting.filter((i) => i.overdue).length;
-    const tiles = [
-      gate
-        ? `<div class="card stat"><div class="stat-label"><span>다음 관문</span>${icon("flag")}</div><div class="stat-value num">${dd(gate.date)}</div><div class="stat-note">${esc(gate.label)} ${F.monthDay(gate.date)}${gate.after.length ? ` · 다음 ${gate.after.map((g) => `${esc(g.label)} ${F.monthDay(g.date)}`).join(", ")}` : ""}</div></div>`
-        : `<div class="card stat"><div class="stat-label"><span>다음 관문</span>${icon("flag")}</div><div class="stat-value">-</div><div class="stat-note">일정(개발·QA·출시 날짜)을 넣으면 보입니다</div></div>`,
+    const facts = [
+      gate && { k: "다음 관문", v: dd(gate.date), d: `${gate.label} ${F.monthDay(gate.date)}` },
       p
-        ? `<div class="card stat" data-internal><div class="stat-label"><span>남은 이슈</span>${icon("list")}</div><div class="stat-value num">${fmt(p.remaining)}<small>건</small></div><div class="stat-note">주 평균 ${fmt(p.velocity)}건 닫고 ${fmt(p.inflow)}건 새로 생김 → ${netWeek(p) > 0 ? `주 ${netWeek(p)}건씩 줄어듦` : netWeek(p) < 0 ? `주 ${-netWeek(p)}건씩 늘어남` : "줄지 않음"}</div></div>`
-        : model.kickoff.active
-          ? `<div class="card stat" data-internal><div class="stat-label"><span>킥오프 단계</span>${icon("list")}</div><div class="stat-value num">${model.kickoff.completed}<small> / ${model.kickoff.stages.length} 끝남</small></div><div class="stat-note">${model.kickoff.current ? `지금 ‘${esc(model.kickoff.current.name)}’ ${model.kickoff.current.done}/${model.kickoff.current.total}` : "모든 단계 끝"}</div></div>`
-          : `<div class="card stat" data-internal><div class="stat-label"><span>남은 이슈</span>${icon("list")}</div><div class="stat-value">-</div><div class="stat-note">이슈 트래커를 연결하면 남은 이슈와 속도가 보입니다</div></div>`,
-      // 예측이 없으면 오른쪽 위 카드가 관문 준비를 보여 주므로, 여기서는 고객사 요청을 얼마나 보냈는지 본다
-      p && gate
-        ? `<div class="card stat"><div class="stat-label"><span>${esc(gate.label)} 전 준비</span>${icon("check")}</div><div class="stat-value num">${gate.ready}<small> / ${gate.total} 확정</small></div><div class="meter" aria-hidden="true"><span style="width:${gate.total ? (gate.ready / gate.total) * 100 : 100}%;background:var(--good)"></span></div><div class="stat-note">${gate.open.length ? `${lateOpen ? `늦은 것 ${lateOpen}건 · ` : ""}먼저 ‘${esc((gate.open.find((i) => !i.guess) || gate.open[0]).title)}’` : "모두 확정"}</div></div>`
-        : `<div class="card stat"><div class="stat-label"><span>고객사 요청 보냄</span>${icon("send")}</div><div class="stat-value num">${model.sheet.stats.sent}<small> / ${model.sheet.stats.total}</small></div><div class="meter" aria-hidden="true"><span style="width:${model.sheet.stats.total ? (model.sheet.stats.sent / model.sheet.stats.total) * 100 : 0}%;background:var(--accent)"></span></div><div class="stat-note">${model.sheet.pending.length ? `아직 안 보낸 것 ${model.sheet.pending.length}건 · 답 받은 것 ${model.sheet.stats.answered}건` : `모두 보냄 · 답 받은 것 ${model.sheet.stats.answered}건`}</div></div>`,
-      `<div class="card stat"><div class="stat-label"><span>고객사 답 기다림</span>${icon("clock")}</div><div class="stat-value num">${waiting.length}<small>건${waitLate ? ` · 기한 지남 ${waitLate}` : ""}</small></div><div class="stat-note">${waiting[0] ? `가장 급한 것 ‘${esc(waiting[0].title)}’${waiting[0].blocks ? ` · ${esc(waiting[0].blocks)} ${F.monthDay(waiting[0].blocksDate)} 전 필요` : ""}` : "기다리는 답 없음"}</div></div>`,
-    ].join("");
+        ? { k: "남은 이슈", v: `${fmt(p.remaining)}건`, d: netWeek(p) > 0 ? `주 ${netWeek(p)}건씩 줄어듦` : netWeek(p) < 0 ? `주 ${-netWeek(p)}건씩 늘어남` : "줄지 않음" }
+        : model.kickoff.active && { k: "킥오프", v: `${model.kickoff.completed}/${model.kickoff.stages.length}단계`, d: model.kickoff.current ? `지금 ${model.kickoff.current.name}` : "끝남" },
+      gate && { k: `${gate.label} 전 준비`, v: `${gate.ready}/${gate.total}`, d: gate.open.filter((i) => i.blocksDate < today).length ? `늦은 것 ${gate.open.filter((i) => i.blocksDate < today).length}건` : "확정 기준" },
+      { k: "고객사 답 기다림", v: `${waiting.length}건`, d: waitLate ? `기한 지남 ${waitLate}건` : "기한 안" },
+    ].filter(Boolean);
+    const factsHtml = `<dl class="facts">${facts.map((f) => `<div><dt>${esc(f.k)}</dt><dd><b class="num">${esc(f.v)}</b><span>${esc(f.d)}</span></dd></div>`).join("")}</dl>`;
 
     const decisions = project.decisions?.length
       ? project.decisions
@@ -651,12 +644,12 @@
           <div>
             <div class="when">리미의 브리핑 · ${F.shortDate(today)}${forecast ? ` · GitHub ${esc(syncLabel(forecast.syncedAt))} 기준` : ""}</div>
             <h2>${esc(project.name)} · 지금 상태 ${chip(health)}</h2>
+            ${factsHtml}
             <ol>${items.map((item, i) => `<li><button class="row-btn" data-brief="${i}" style="font-size:14px">${item.text}</button></li>`).join("")}</ol>
             <div class="btn-row"><button class="btn primary" data-open-limi>${icon("chat")}리미와 대화</button></div>
           </div>
         </section>
         <section class="card hero span-4" data-internal>${verdict}</section>
-        <div class="stats span-12">${tiles}</div>
         ${model.kickoff.active ? `<section class="card span-12" data-internal><div class="card-head"><div class="ch-title"><h2>킥오프 진행 ${model.kickoff.completed}/${model.kickoff.stages.length}</h2><span class="sub">개발 착수${project.dates?.devStart ? ` ${F.monthDay(project.dates.devStart)}` : ""} 전까지 보입니다</span></div><button class="link-btn" data-go="kickoff">킥오프 화면 →</button></div>${stepperHtml(model)}</section>` : ""}
         <section class="card span-7" data-internal><div class="card-head"><div class="ch-title"><h2>이번 주 할 일</h2><span class="sub">늦은 것부터</span></div>${model.thisWeek.length > 6 ? `<button class="link-btn" data-week-all>전체 ${model.thisWeek.length}개 →</button>` : ""}</div>${todoHtml(model, 6)}</section>
         <section class="card span-5 client-span"><div class="card-head"><div class="ch-title"><h2>고객사 답 기다림</h2><span class="sub">급한 것부터</span></div><button class="link-btn" data-go="requests">전체 →</button></div><div class="list">${waitingHtml}</div></section>
@@ -719,6 +712,15 @@
     }
   }
 
+  const WBS_DAY_PX = 6;
+  const WBS_FIXED_PX = 48 + 124 + 160 + 106 + 50 + 108 + 84;
+  // 처음 열 때 오늘이 보이도록 가로 스크롤을 옮긴다
+  function scrollWbsToToday() {
+    const sc = $(".wbs-scroll");
+    if (!sc || sc.scrollWidth <= sc.clientWidth) return;
+    const x = Number(sc.dataset.todayX) || 0;
+    if (x) sc.scrollLeft = Math.max(0, x - sc.clientWidth * 0.6);
+  }
   // WBS: 단계 → 마일스톤(스프린트·출시·주요 일정) → 이슈. 오른쪽은 기간 막대
   function wbsHtml(model) {
     const { project, forecast } = model;
@@ -791,8 +793,11 @@
         }
       }
     }
-    return `<div class="wbs-scroll"><table class="wbs">
-      <colgroup><col style="width:48px"><col style="width:124px"><col style="width:160px"><col style="width:106px"><col style="width:50px"><col style="width:108px"><col style="width:84px"><col></colgroup>
+    // 열 폭은 고정하고, 기간 막대는 하루에 WBS_DAY_PX씩. 길어지면 가로로 스크롤한다(번호·작업 열은 왼쪽에 고정)
+    const ganttW = Math.max(360, (span + 1) * WBS_DAY_PX);
+    const todayX = today >= start && today <= end ? WBS_FIXED_PX + (pct(today) / 100) * ganttW : 0;
+    return `<div class="wbs-scroll" data-today-x="${Math.round(todayX)}"><table class="wbs" style="width:max(100%, ${WBS_FIXED_PX + ganttW}px)">
+      <colgroup><col style="width:48px"><col style="width:124px"><col style="width:160px"><col style="width:106px"><col style="width:50px"><col style="width:108px"><col style="width:84px"><col style="width:${ganttW}px"></colgroup>
       <thead><tr><th>WBS</th><th>작업</th><th>목표</th><th>기간</th><th>일수</th><th>진행</th><th>상태</th><th class="gantt"><div class="wbs-months">${months}</div></th></tr></thead>
       <tbody>${rows.join("")}</tbody></table></div>
       <p class="muted" style="font-size:12px;margin:8px 0 0">스프린트 이름을 누르면 오른쪽에 상세가 열리고 목표를 적을 수 있습니다. ▸를 누르면 그 스프린트의 이슈가 펼쳐집니다. 진행은 닫은 이슈/전체(단계는 하위 스프린트 합계, 스프린트가 없으면 지난 날짜 비율).</p>`;
@@ -2398,7 +2403,10 @@
     const model = getModel();
     const content = $("#content");
     content.innerHTML = (VIEWS[state.view] || renderOverview)(model);
-    if (state.view === "schedule") mountScheduleCharts(model);
+    if (state.view === "schedule") {
+      mountScheduleCharts(model);
+      scrollWbsToToday();
+    }
     hydrateIcons(content);
     updateChrome();
     store.project = state.projectId;
@@ -2433,7 +2441,11 @@
       const n = Number(t.dataset.wbsToggle);
       if (state.wbsOpen.has(n)) state.wbsOpen.delete(n);
       else state.wbsOpen.add(n);
-      return render();
+      // 펼치고 접어도 보던 가로 위치를 지킨다
+      const left = $(".wbs-scroll")?.scrollLeft;
+      render();
+      if (left != null && $(".wbs-scroll")) $(".wbs-scroll").scrollLeft = left;
+      return;
     }
     if (t.dataset.sprint) return openSprintDrawer(t.dataset.sprint);
     if (t.hasAttribute("data-update-open")) return openUpdateDrawer();
