@@ -890,6 +890,7 @@ function rowsCommand(args, kind) {
     const result = [args.result, args.note].find((v) => typeof v === "string" && v.trim());
     if (!result) throw new UsageError('무엇으로 정했는지 --result로 적으세요 (예: pm decision done 1 --result "웹 결제로 출시, 앱 결제는 2차" --date 2026-10-12 --src "주간 회의")');
     const decidedAt = args.date === undefined ? today() : parseDate(args.date, "date");
+    if (decidedAt > today()) throw new UsageError(`--date는 결정한 날입니다. 오늘(${today()}) 뒤의 날짜는 쓸 수 없습니다: ${decidedAt}`);
     const [row] = rows.splice(index, 1);
     const done = { title: row.title, recommend: row.recommend || "", ...(row.due ? { due: row.due } : {}), result: result.trim(), decidedAt, recordedAt: today(), src: typeof args.src === "string" && args.src.trim() ? args.src.trim() : "PM" };
     project.resolvedDecisions = [done, ...(project.resolvedDecisions || [])];
@@ -904,10 +905,13 @@ function rowsCommand(args, kind) {
     return console.log(`${what} 목록에서 뺐습니다: ${row.title}${typeof args.note === "string" ? ` — ${args.note}` : ""}`);
   }
   if (kind === "decision" && sub === "resolved") {
+    // 제목·결과·결정일이 맞지 않는 항목은 빼고 보여 준다(core.js가 거른다). 몇 개를 뺐는지는 알린다
     const done = Core.model(Core.normalize(project, today()), { today: today() }).resolvedDecisions;
+    const skipped = (project.resolvedDecisions || []).length - done.length;
     if (args.json) return console.log(JSON.stringify(done, null, 2));
-    if (!done.length) return console.log("해결된 결정이 없습니다.");
+    if (!done.length) console.log("해결된 결정이 없습니다.");
     for (const d of done) console.log(`${F.monthDay(d.decidedAt)}  ${d.title} — ${d.result}${d.src ? ` (${d.src})` : ""}`);
+    if (skipped > 0) console.log(`(형식이 맞지 않는 항목 ${skipped}개는 뺐습니다 — pm validate로 확인)`);
     return;
   }
   throw new UsageError(`pm ${kind} [list | add | set | check | ${kind === "decision" ? "done | resolved" : "remove"}] — pm help`);

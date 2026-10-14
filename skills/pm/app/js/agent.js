@@ -1161,6 +1161,20 @@
     }
   };
   window.addEventListener("scroll", compactFab, { passive: true });
+  // 휴대폰(860px 이하): 아래로 스크롤하는 동안 비켜 서고, 위로 올리거나 맨 위로 오면 다시 나온다(오른쪽 숫자를 가리지 않게)
+  let lastY = window.scrollY;
+  window.addEventListener(
+    "scroll",
+    () => {
+      const y = window.scrollY;
+      if (window.innerWidth > 860 || y < 60) els.fab.classList.remove("away");
+      else if (y > lastY + 4) els.fab.classList.add("away");
+      else if (y < lastY - 4) els.fab.classList.remove("away");
+      lastY = y;
+    },
+    { passive: true },
+  );
+  els.fab.addEventListener("focus", () => els.fab.classList.remove("away"));
   // 스크롤하지 않아도 8초 뒤에는 접는다(첫 화면 오른쪽 아래 숫자를 오래 가리지 않게)
   setTimeout(() => {
     els.fab.classList.add("compact");

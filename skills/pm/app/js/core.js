@@ -361,7 +361,8 @@
       checklist: items,
       decisions: decisionsOf(project, today),
       // 해결된 결정: 최근에 정한 것부터(무엇으로 정했는지와 날짜)
-      resolvedDecisions: [...(project.resolvedDecisions || [])].sort((a, b) => (b.decidedAt || "").localeCompare(a.decidedAt || "")),
+      // 제목·결과·결정일(달력 날짜)이 있는 것만(형식이 틀린 항목은 pm validate가 알린다)
+      resolvedDecisions: (project.resolvedDecisions || []).filter((d) => d && d.title && d.result && isDate(d.decidedAt)).sort((a, b) => b.decidedAt.localeCompare(a.decidedAt)),
       risks: risksOf(project, today),
       readiness: readiness(items),
       // 고객사 답 기다림: 막히는 일정이 가까운 것부터(가장 오래된 것이 아니라 가장 급한 것)

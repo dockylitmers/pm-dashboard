@@ -2607,9 +2607,11 @@
     $("#health-chip").innerHTML = chip(health, `${health.label}`);
     $("#health-chip").title = health.reasons.join(" · ");
     const launch = project.dates?.launch;
+    // 좁은 상단 바(950px 이하)에서는 날짜를 빼고 'D-47'만 남긴다(.dd-date)
     $("#dday").innerHTML = launch
-      ? `${icon("flag")}출시 ${F.monthDay(launch)} · D-${F.daysBetween(realToday(), launch)}`
+      ? `${icon("flag")}<span class="dd-date">출시 ${F.monthDay(launch)} · </span>D-${F.daysBetween(realToday(), launch)}`
       : `${icon("flag")}출시일 미정`;
+    $("#dday").title = launch ? `출시 ${F.shortDate(launch)}` : "";
     const q = model.queue.length;
     $("#queue-count").textContent = q;
     $("#queue-count").classList.toggle("zero", q === 0);
