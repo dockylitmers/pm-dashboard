@@ -60,6 +60,30 @@
   const rank = (status) => STATUS[status]?.order ?? 0;
   const atLeast = (status, target) => status !== "not_needed" && rank(status) >= rank(target);
   const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "");
+  const RISK_LEVEL = { high: "높음", mid: "중간", low: "낮음" };
+
+  // 날짜와 오늘의 차이: 'D-2', '오늘', '2일 지남'
+  const dayLabel = (days) => (days === 0 ? "오늘" : days > 0 ? `D-${days}` : `${-days}일 지남`);
+
+  // 기한(YYYY-MM-DD)을 오늘과 비교한다. 날짜가 아닌 옛 값(예: '이번 주')은 글자 그대로 두고 계산하지 않는다
+  function dueInfo(due, today = F.kstDate(new Date())) {
+    if (!due) return null;
+    if (!isDate(due)) return { raw: String(due), date: null, days: null, late: false, soon: false, invalid: true, label: String(due), text: String(due) };
+    const days = F.daysBetween(today, due);
+    const label = dayLabel(days);
+    return { raw: due, date: due, days, late: days < 0, soon: days >= 0 && days <= 3, invalid: false, label, text: `${F.monthDay(due)} · ${label}` };
+  }
+
+  // 값을 마지막으로 확인한 날·출처(checked: { at, src, guess })
+  const freshOf = (checked) => ({
+    checkedAt: isDate(checked?.at) ? checked.at : null,
+    checkedSrc: checked?.src || null,
+    guess: !!checked?.guess,
+  });
+
+  // 결정·위험: 번호(목록 순서, CLI가 쓴다), 기한 계산, 확인일
+  const decisionsOf = (project, today) => (project.decisions || []).map((d, i) => ({ ...d, n: i + 1, dueInfo: dueInfo(d.due, today), ...freshOf(d.checked) }));
+  const risksOf = (project, today) => (project.risks || []).map((r, i) => ({ ...r, n: i + 1, dueInfo: dueInfo(r.due, today), ...freshOf(r.checked) }));
 
   // 회사 이름이 들어가는 문구. 회사 이름은 워크스페이스 설정(company)에서 온다
   function labels(company = "우리 회사") {
@@ -298,6 +322,8 @@
       forecast,
       today,
       checklist: items,
+      decisions: decisionsOf(project, today),
+      risks: risksOf(project, today),
       readiness: readiness(items),
       // 고객사 답 기다림: 막히는 일정이 가까운 것부터(가장 오래된 것이 아니라 가장 급한 것)
       waiting: items
@@ -480,6 +506,11 @@
     STAGES,
     CONTRACT_REVIEW,
     PAYMENT_STATUS,
+    RISK_LEVEL,
+    isDate,
+    dayLabel,
+    dueInfo,
+    freshOf,
     labels,
     anchorDates,
     fill,

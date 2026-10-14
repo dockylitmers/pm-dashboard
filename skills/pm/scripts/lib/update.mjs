@@ -94,10 +94,22 @@ export function readUpdate(w, id) {
     return null;
   }
 }
+// 원본별로 마지막으로 읽기에 성공한 시각. 한 단계가 실패해도 다른 원본이 언제 기준인지 화면이 따로 보여 준다
+export function sourceTimes(previous, result) {
+  const prev = previous?.last?.sources || {};
+  const ok = (key) => result.steps.some((s) => s.key === key && s.ok);
+  // 예전 기록에는 sources가 없으므로 기록에서 마지막으로 성공한 전체 업데이트를 찾는다
+  const lastDeep = (previous?.history || []).find((h) => h.mode === "deep" && h.ok)?.at || null;
+  return {
+    github: ok("github") ? result.at : prev.github || null,
+    client: ok("deep") ? result.at : prev.client || lastDeep,
+  };
+}
 function recordUpdate(w, id, result) {
   const previous = readUpdate(w, id) || {};
-  const line = { at: result.at, trigger: result.trigger, mode: result.mode, ok: result.ok, summary: result.summary };
-  writeJson(updateFile(w, id), { last: result, history: [line, ...(previous.history || [])].slice(0, HISTORY_LIMIT) });
+  const last = { ...result, sources: sourceTimes(previous, result) };
+  const line = { at: result.at, trigger: result.trigger, mode: result.mode, ok: result.ok, summary: result.summary, ...(result.ok ? {} : { error: result.error }) };
+  writeJson(updateFile(w, id), { last, history: [line, ...(previous.history || [])].slice(0, HISTORY_LIMIT) });
 }
 
 const lockFile = (w) => path.join(w.dir, ".pm-update.lock");
@@ -208,7 +220,7 @@ CLI: node ${PM_SCRIPT} <명령> --workspace ${w.dir} --project ${id}
 ${[...new Set(sources)].map((s) => `- ${s}`).join("\n") || "- (등록된 원본 없음)"}
 
 할 일
-1. \`refresh --json\`으로 다시 확인할 항목을, \`list --json\`으로 전체 항목(fields, note, internal, res, checkedAt)을 본다.
+1. \`refresh --json\`으로 다시 확인할 항목을, \`list --json\`으로 전체 항목(fields, note, internal, res, checkedAt)을, \`decision --json\`·\`risk --json\`으로 결정 필요와 위험(기한, 확인일)을 본다.
 2. 원본을 읽기만 한다.
    - GitHub: \`gh issue view <번호> -R <저장소> --comments\`. 항목의 마지막 확인일 뒤 코멘트, 특히 '## Decision'·'## 결정'.
    - Notion: 고객 소통 페이지와 항목의 res.url을 notion-fetch로 읽는다. 고객사 답은 노란 배경과 댓글(notion-get-comments)이다. 지난 전체 업데이트 뒤 새로 생긴 답을 찾아 해당 항목에 반영한다.
@@ -218,6 +230,7 @@ ${[...new Set(sources)].map((s) => `- ${s}`).join("\n") || "- (등록된 원본 
    - 값이 바뀌었으면 \`answer <item> "라벨=값" --src "<출처>"\` 또는 \`set <item> --status <s> --note "<결론>" --internal "<내부 메모>" --src "<출처>"\`.
    - 그대로면 \`check <item...> --src "<출처>"\`.
    - 원본에서 확인하지 못한 값은 '없음'으로 바꾸지 말고 \`check <item> --guess --src "<찾아본 곳>"\`로 두고 asks에 질문을 넣는다. 기록이 없다고 없는 것이 아니다.
+   - 결정 필요·위험은 \`decision\`·\`risk\` 명령으로만 고친다(번호는 \`decision --json\`의 n). 기한은 날짜(YYYY-MM-DD)로 쓴다. '오늘'·'이번 주'처럼 원본에 적힌 말은 그 글이 쓰인 날 기준 날짜로 바꿔 \`--due\`에 넣는다. 그대로면 \`decision check <번호> --src "<출처>"\`, 기한·권장안이 바뀌었으면 \`decision set <번호> --due YYYY-MM-DD --src "<출처>"\`. 원본에서 이미 결정된 것으로 보이면 지우지 말고(\`done\` 금지) asks에 "○○로 결정됐나요?"를 넣는다.
 4. 지킬 것
    - GitHub·Notion·메일 등 원본에는 아무것도 쓰지 않는다. 허용되지 않은 도구는 쓰지 않는다.
    - 비밀번호, API 키, 토큰, 개인 전화번호·이메일은 기록하지 않는다. 원본에 있으면 "받음(원본에 있음)"으로만 쓴다.
@@ -306,18 +319,18 @@ export async function runUpdate(w, ids, { trigger = "manual", offline = false, d
       if (project.github?.repo && !offline) {
         try {
           const snap = await sync(project.github.repo, w.githubFile(id));
-          steps.push({ name: "GitHub 이슈", ok: true, detail: `이슈 ${snap.issues.length}개 · 마일스톤 ${snap.milestones.length}개` });
+          steps.push({ key: "github", name: "GitHub 이슈", ok: true, detail: `이슈 ${snap.issues.length}개 · 마일스톤 ${snap.milestones.length}개` });
         } catch (error) {
-          steps.push({ name: "GitHub 이슈", ok: false, detail: String(error.message).slice(0, 200) });
+          steps.push({ key: "github", name: "GitHub 이슈", ok: false, detail: String(error.message).slice(0, 200) });
         }
       }
       let report = await refreshReport(w, id, { offline });
-      steps.push({ name: "다시 확인할 값", ok: !report.githubFailed, detail: report.githubNote });
+      steps.push({ key: "recheck", name: "다시 확인할 값", ok: !report.githubFailed, detail: report.githubNote });
       let deepResult = null;
       if (deep && !project.sample) {
         log(`${id}: 전체 업데이트(Claude) 시작`);
         deepResult = await runClaude(w, id, log);
-        steps.push({ name: "원본 확인(Claude)", ok: deepResult.ok, detail: deepResult.ok ? `바뀐 값 ${deepResult.changed.length}개 · 물어볼 것 ${deepResult.asks.length}개` : deepResult.error });
+        steps.push({ key: "deep", name: "원본 확인(Claude)", ok: deepResult.ok, detail: deepResult.ok ? `바뀐 값 ${deepResult.changed.length}개 · 물어볼 것 ${deepResult.asks.length}개` : deepResult.error });
         report = await refreshReport(w, id, { offline });
       }
       const c = report.counts;

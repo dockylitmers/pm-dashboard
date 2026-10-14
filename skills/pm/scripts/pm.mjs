@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { BALLS, Core, DATE_RE, Docs, F, fmt, gitRemoteRepo, ID_RE, list, openFile, pad, parseArgs, parseDate, SKILL_DIR, today, UsageError } from "./lib/common.mjs";
+import { BALLS, Core, DATE_RE, Docs, F, fmt, gitRemoteRepo, ID_RE, list, openFile, pad, parseArgs, parseDate, parseDue, SKILL_DIR, today, UsageError } from "./lib/common.mjs";
 import { dashboardHtml } from "./lib/build.mjs";
 import { setupRepo, sync } from "./lib/github.mjs";
 import { applyScope, library, newProject } from "./lib/library.mjs";
@@ -79,6 +79,18 @@ commands.help = () => {
   sprint [<SP-05> --goal "목표"]    스프린트 목록과 목표 보기·입력
   set <item> [--status s] [--ball b] [--requested today|D] [--due D] [--res-label t] [--res-url u] [--log 기록]
              [--src 출처] [--guess] [--note 결론] [--internal 내부 메모]
+
+결정·위험 (기한은 날짜로 저장: YYYY-MM-DD, 10/16, 오늘, 내일, "이번 주"=그 주 금요일, "다음 주"는 쓰는 날 기준으로 바꾼다)
+  decision [--json]               결정 필요 목록 (번호 · 기한 D-n/n일 지남 · 확인일)
+  decision add "제목" --recommend 권장안 --due 기한 [--src 출처] [--guess]
+  decision set <번호> [--title t] [--recommend r] [--due 기한 | --no-due] [--src 출처] [--guess]
+  decision check <번호...> --src 출처 [--guess]    원본에서 다시 확인함(값은 그대로)
+  decision done <번호> [--note 결과]               결정됨: 목록에서 뺀다
+  risk [--json]                   위험 목록
+  risk add "제목" --level high|mid|low [--detail 내용] [--mitigation 대응] [--owner 담당] [--due 기한] [--src 출처]
+  risk set <번호> [--title] [--level] [--detail] [--mitigation] [--owner] [--due] [--src] [--guess]
+  risk check <번호...> --src 출처 [--guess]
+  risk remove <번호>
 
 계약
   contract                        계약 점검·대금 단계 보기
@@ -233,11 +245,30 @@ commands.validate = (args) => {
       if (item.status === "requested" && !item.requested) issues.push(`${where}: 요청함인데 requested 날짜가 없음(대기 일수를 못 셈)`);
     }
     for (const r of p.contract?.review || []) if (!Core.CONTRACT_REVIEW[r.status || "unchecked"]) issues.push(`contract.review.${r.id}: status '${r.status}'`);
+    // 결정·위험: 기한은 날짜여야 화면이 'D-n'·'n일 지남'을 계산한다. 옛 글자 기한은 오류가 아니라 경고로 알린다
+    const warnings = [];
+    const checkMark = (where, checked) => {
+      if (checked && (!DATE_RE.test(checked.at || "") || typeof checked.src !== "string")) issues.push(`${where}.checked 형식: { at: YYYY-MM-DD, src: 출처, guess?: true }`);
+    };
+    (p.decisions || []).forEach((d, i) => {
+      const where = `decisions[${i + 1}] '${d.title || "?"}'`;
+      if (!d.title) issues.push(`decisions[${i + 1}]: title 없음`);
+      if (d.due && !DATE_RE.test(d.due)) warnings.push(`${where}: 기한이 날짜가 아님('${d.due}') — pm decision set ${i + 1} --due YYYY-MM-DD`);
+      checkMark(`decisions[${i + 1}]`, d.checked);
+    });
+    (p.risks || []).forEach((r, i) => {
+      const where = `risks[${i + 1}] '${r.title || "?"}'`;
+      if (!r.title) issues.push(`risks[${i + 1}]: title 없음`);
+      if (r.level && !Core.RISK_LEVEL[r.level]) issues.push(`${where}: level '${r.level}' (가능: ${Object.keys(Core.RISK_LEVEL).join(", ")})`);
+      if (r.due && !DATE_RE.test(r.due)) warnings.push(`${where}: 기한이 날짜가 아님('${r.due}') — pm risk set ${i + 1} --due YYYY-MM-DD`);
+      checkMark(`risks[${i + 1}]`, r.checked);
+    });
     const text = JSON.stringify(p);
     if (/sk-ant-|ghp_|github_pat_|xox[bp]-|AKIA[0-9A-Z]{16}|(?:test|live)_(?:sk|ck|gsk)_/.test(text)) issues.push("비밀값처럼 보이는 문자열이 있음 — 링크·이름만 두고, 계정은 권한 초대로 받는다");
     if (/비밀번호\s*[:=]\s*\S|password\s*[:=]\s*\S/i.test(text)) issues.push("비밀번호가 적힌 것 같음 — 지우고 권한 초대로 받는다");
     problems += issues.length;
     console.log(issues.length ? `✗ ${id}\n${issues.map((x) => `  - ${x}`).join("\n")}` : `✓ ${id}`);
+    if (warnings.length) console.log(warnings.map((x) => `  ! 경고: ${x}`).join("\n"));
   }
   if (problems) process.exitCode = 1;
 };
@@ -278,8 +309,8 @@ function statusSummary(m) {
     missing: missing.map((i) => ({ id: i.id, title: i.title, ball: i.ball, askBy: i.askBy, blocks: i.blocks || null })),
     waitingOnClient: waiting.map((i) => ({ id: i.id, title: i.title, waitDays: i.waitDays, overdue: i.overdue, blocks: i.blocks || null })),
     contract: contract ? { review: contract.review, nextPayment: contract.next ? { name: contract.next.name, trigger: contract.next.trigger, due: contract.next.dueDate } : null } : null,
-    decisions: project.decisions || [],
-    risks: project.risks || [],
+    decisions: m.decisions.map(({ dueInfo, n, ...d }) => ({ ...d, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late })),
+    risks: m.risks.map(({ dueInfo, n, ...r }) => ({ ...r, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late })),
     approvalQueue: (project.queue || []).map((q) => ({ id: q.id, title: q.title })),
   };
 }
@@ -712,6 +743,106 @@ commands.sprint = (args) => {
   for (const key of Object.keys(goals).filter((k) => !views.some((v) => v.title.split(/\s/)[0] === k))) console.log(`${pad(key, 8)}${pad("", 23)}  ${goals[key].goal}`);
   console.log("\n목표 입력: pm sprint SP-05 --goal \"결제·환불 흐름 끝내기\"");
 };
+
+// ---------------------------------------------------------------- 결정·위험
+
+// '이번 주'를 따옴표 없이 쓰면 셸이 두 낱말로 나누므로 남은 '주'를 --due에 붙인다
+function joinDueWords(args) {
+  if (/^(이번|다음)$/.test(String(args.due)) && args._.includes("주")) {
+    args._.splice(args._.lastIndexOf("주"), 1);
+    args.due = `${args.due} 주`;
+  }
+}
+function dueArg(args) {
+  if (args.due === undefined || args.due === true) return undefined;
+  return parseDue(String([].concat(args.due).at(-1)), "due");
+}
+
+// 번호(목록 순서) 또는 제목 일부로 찾는다
+function pickRows(rows, keys, what) {
+  if (!keys.length) throw new UsageError(`${what} 번호를 적으세요 (목록: pm ${what === "결정" ? "decision" : "risk"})`);
+  return keys.map((key) => {
+    const n = Number(key);
+    const index = Number.isInteger(n) && n >= 1 && n <= rows.length ? n - 1 : rows.findIndex((r) => (r.title || "").includes(key));
+    if (index < 0) throw new UsageError(`${what} '${key}'를 찾지 못했습니다. 번호는 1~${rows.length}`);
+    return index;
+  });
+}
+
+const dueText = (due) => {
+  const info = Core.dueInfo(due, today());
+  return !info ? "기한 없음" : info.invalid ? `기한 '${info.raw}'(날짜 아님)` : `기한 ${F.shortDate(info.date)} · ${info.label}`;
+};
+const checkedText = (row) => (row.checked?.at ? `확인 ${F.monthDay(row.checked.at)}${row.checked.src ? ` · ${row.checked.src}` : ""}${row.checked.guess ? " (추정)" : ""}` : "확인 기록 없음");
+
+function rowsCommand(args, kind) {
+  const { w, id } = target(args);
+  const project = w.load(id);
+  const key = kind === "decision" ? "decisions" : "risks";
+  const what = kind === "decision" ? "결정" : "위험";
+  const rows = (project[key] ||= []);
+  joinDueWords(args);
+  const [sub = "list", ...rest] = args._;
+  const fields = kind === "decision" ? ["title", "recommend"] : ["title", "detail", "mitigation", "owner"];
+  const setFields = (row) => {
+    for (const field of fields) if (typeof args[field] === "string") row[field] = args[field].trim();
+    if (kind === "risk" && args.level !== undefined) {
+      if (!Core.RISK_LEVEL[args.level]) throw new UsageError(`--level: ${Object.keys(Core.RISK_LEVEL).join(", ")}`);
+      row.level = args.level;
+    }
+    if (args["no-due"]) delete row.due;
+    else {
+      const due = dueArg(args);
+      if (due) row.due = due;
+    }
+  };
+  if (sub === "list") {
+    const list = Core.model(Core.normalize(project, today()), { today: today() })[key];
+    if (args.json) return console.log(JSON.stringify(list.map(({ dueInfo, ...row }) => ({ ...row, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late, dueInvalid: !!dueInfo?.invalid })), null, 2));
+    if (!list.length) return console.log(`${what} 필요한 일이 없습니다. 추가: pm ${kind} add "제목" ...`);
+    for (const row of list) {
+      const head = kind === "decision" ? `${row.title} — 권장: ${row.recommend || "-"}` : `[${Core.RISK_LEVEL[row.level] || row.level || "-"}] ${row.title}${row.owner ? ` · 담당 ${row.owner}` : ""}`;
+      console.log(`${pad(row.n, 3)}${row.dueInfo?.late ? "! " : "  "}${head}`);
+      console.log(`     ${dueText(row.due)} · ${checkedText(row)}${kind === "risk" && row.mitigation ? `\n     → ${row.mitigation}` : ""}`);
+    }
+    return;
+  }
+  if (sub === "add") {
+    const title = rest.join(" ").trim() || (typeof args.title === "string" ? args.title.trim() : "");
+    if (!title) throw new UsageError(`pm ${kind} add "제목" ...`);
+    const row = kind === "decision" ? { title, recommend: "" } : { title, level: "mid" };
+    setFields(row);
+    row.title = title;
+    row.checked = checkedMark(args, "PM");
+    rows.push(row);
+    w.save(id, project);
+    return console.log(`${what} ${rows.length}: ${row.title} · ${dueText(row.due)}`);
+  }
+  if (sub === "set" || sub === "check") {
+    const indexes = pickRows(rows, rest, what);
+    if (sub === "check" && (typeof args.src !== "string" || !args.src.trim())) throw new UsageError("--src로 확인한 곳을 적으세요 (예: \"Notion 요청 페이지\", \"GitHub #153\", \"PM\")");
+    if (sub === "set" && indexes.length !== 1) throw new UsageError(`pm ${kind} set은 한 번에 하나씩`);
+    for (const index of indexes) {
+      const row = rows[index];
+      if (sub === "set") setFields(row);
+      row.checked = checkedMark(args, "PM");
+      console.log(`${what} ${index + 1}: ${row.title} · ${dueText(row.due)} · ${checkedText(row)}`);
+    }
+    return w.save(id, project);
+  }
+  if (sub === "done" || sub === "remove") {
+    const [index] = pickRows(rows, rest.slice(0, 1), what);
+    const [row] = rows.splice(index, 1);
+    w.save(id, project);
+    return console.log(`${what} 목록에서 뺐습니다: ${row.title}${typeof args.note === "string" ? ` — ${args.note}` : ""}${kind === "decision" ? "\n결정 내용은 체크리스트·일정에 반영하세요 (pm set, project.json)." : ""}`);
+  }
+  throw new UsageError(`pm ${kind} [list | add | set | check | ${kind === "decision" ? "done" : "remove"}] — pm help`);
+}
+
+commands.decision = (args) => rowsCommand(args, "decision");
+commands.decisions = commands.decision;
+commands.risk = (args) => rowsCommand(args, "risk");
+commands.risks = commands.risk;
 
 // ---------------------------------------------------------------- 계약
 

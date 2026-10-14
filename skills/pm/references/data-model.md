@@ -27,8 +27,8 @@
 | `categories` | `[{ id, name }]` | 분류 |
 | `checklist` | 배열 | 아래 '체크리스트 항목' |
 | `contract` | 객체 | 아래 '계약' |
-| `decisions` | `[{ title, recommend, due }]` | 결정이 필요한 일 |
-| `risks` | `[{ title, level, detail, mitigation }]` | level: `high`·`mid`·`low` |
+| `decisions` | `[{ title, recommend, due, checked }]` | 결정이 필요한 일. 아래 '결정·위험' |
+| `risks` | `[{ title, level, detail, mitigation, owner, due, checked }]` | level: `high`·`mid`·`low`. 아래 '결정·위험' |
 | `resources` | `[{ id, name, glyph, desc, url }]` | 원본 위치 |
 | `srs` | 객체 | `{ exists, location, url, summary, counts, platforms, roles, features }` |
 | `queue` | 배열 | 승인 대기열(대시보드, `pm request --queue`) |
@@ -80,6 +80,22 @@
 }
 ```
 
+### 결정·위험
+
+| 필드 | 설명 |
+|---|---|
+| `title` | 결정할 일·위험 이름 |
+| `recommend` | (결정) 권장안 |
+| `level`, `detail`, `mitigation`, `owner` | (위험) 영향 `high`·`mid`·`low`, 내용, 대응, 담당(선택) |
+| `due` | 기한 `YYYY-MM-DD`. 위험은 대응을 다시 볼 날. 화면은 오늘과 비교해 'D-2', '오늘', '2일 지남'으로 보여 주고, 지난 것은 할 일·브리핑 맨 앞에 올린다 |
+| `checked` | `{ at, src, guess? }` 원본에서 마지막으로 확인한 날·출처·추정 여부(체크리스트 항목과 같은 형식) |
+
+`pm decision`·`pm risk`가 쓴다. `--due`에 '오늘'·'내일'·'모레'·'이번 주'(그 주 금요일, 주말이면 다가오는 금요일)·'다음 주'·'10/16'·'+3'을 주면 쓰는 날 기준 날짜로 바꿔 저장한다. 날짜가 아닌 옛 값(0.7 이전의 '이번 주' 같은 글자)은 화면에 글자 그대로 보이고 계산하지 않으며, `pm validate`가 경고한다. 결정이 내려지면 `pm decision done <번호>`로 목록에서 빼고 결과를 체크리스트·일정에 반영한다. 결정·위험은 고객사 공유본에서 빠진다.
+
+```json
+{ "title": "네이버 로그인 운영 앱 방식", "recommend": "고객사 계정 앱 하나로 지금 검수 신청", "due": "2026-10-16", "checked": { "at": "2026-10-12", "src": "주간 회의" } }
+```
+
 ### 계약
 
 ```json
@@ -98,7 +114,9 @@ review.status: `unchecked`·`ok`·`risk`·`missing`·`na`. payments.status: `pla
 
 ## update.json
 
-`pm update`(대시보드 버튼, 자동 실행 포함)가 만든다. git에 올리지 않는다. `{ last: { at, mode(quick·deep), trigger(manual·dashboard·schedule), ok, durationSec, steps: [{ name, ok, detail }], recheck: { total, guess, moved, stale }, recheckItems: [{ id, title, kind, github }], summary, changed: [{ id, what }], asks: [{ id, question }], cost, error }, history: [{ at, mode, trigger, ok, summary }] }` (기록은 30개까지). `changed`·`asks`·`cost`는 전체 업데이트일 때만 채워진다.
+`pm update`(대시보드 버튼, 자동 실행 포함)가 만든다. git에 올리지 않는다. `{ last: { at, mode(quick·deep), trigger(manual·dashboard·schedule), ok, durationSec, steps: [{ key(github·recheck·deep), name, ok, detail }], recheck: { total, guess, moved, stale }, recheckItems: [{ id, title, kind, github }], summary, changed: [{ id, what }], asks: [{ id, question }], cost, error, sources: { github, client } }, history: [{ at, mode, trigger, ok, summary, error? }] }` (기록은 30개까지). `changed`·`asks`·`cost`는 전체 업데이트일 때만 채워진다.
+
+`sources`는 원본별로 마지막으로 읽기에 성공한 시각이다(`github`: GitHub 이슈, `client`: 전체 업데이트가 고객사 답(Notion)·GitHub 코멘트를 읽은 때). 한 단계가 실패하면 그 원본은 앞의 시각을 그대로 두므로, 대시보드는 'GitHub 08:30 · 고객사 답 10/13 18:34'처럼 원본마다 기준 시각을 따로 보여 준다. 0.8 이전 기록에는 없어서, 화면은 기록에서 마지막으로 성공한 전체 업데이트와 GitHub 스냅샷 시각으로 대신 계산한다.
 
 `pm-workspace.json`의 설정: `schedule`(`{ times, deep, serve, installedAt }`, 자동 실행), `update`(`{ allowedTools, model, maxBudgetUsd }`, 전체 업데이트에 더할 읽기 도구·모델·비용 한도, 모두 선택).
 

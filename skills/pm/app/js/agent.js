@@ -538,11 +538,11 @@
   }
 
   function riskReply() {
-    const risks = model.project.risks || [];
+    const risks = model.risks || [];
     if (!risks.length) return addMessage("bot", "등록된 위험이 없어요.");
     addMessage(
       "bot",
-      `지금 위험은 ${risks.length}가지예요 (영향 큰 순).\n${risks.map((r, i) => `${i + 1}. <b>${esc(r.title)}</b>${r.level === "high" ? " (높음)" : ""}\n   ${esc(r.detail)}\n   → ${esc(r.mitigation)}`).join("\n")}`,
+      `지금 위험은 ${risks.length}가지예요 (영향 큰 순).\n${risks.map((r, i) => `${i + 1}. <b>${esc(r.title)}</b>${r.level === "high" ? " (높음)" : ""}\n   ${esc(r.detail || "")}\n   → ${esc(r.mitigation || "")}${r.owner || r.dueInfo ? `\n   ${[r.owner && `담당 ${esc(r.owner)}`, r.dueInfo && `기한 ${dueOf(r)}`].filter(Boolean).join(" · ")}` : ""}`).join("\n")}`,
       [
         {
           label: "오늘 화면",
@@ -577,19 +577,21 @@
     );
   }
 
+  // 기한: '10/16 · D-2', '10/12 · 2일 지남'. 날짜가 아닌 옛 값은 그대로
+  const dueOf = (row) => (row.dueInfo ? (row.dueInfo.late ? `<b>${esc(row.dueInfo.text)}</b>` : esc(row.dueInfo.text)) : "기한 없음");
   function decisionReply(text) {
-    const decisions = model.project.decisions || [];
+    const decisions = model.decisions || [];
     const target = decisions.find((d) => text.includes(d.title)) || null;
     if (target) {
       addMessage(
         "bot",
-        `<b>${esc(target.title)}</b> (기한 ${esc(target.due)})\n\n권장안: <b>${esc(target.recommend)}</b>\n\n결정 요청은 이렇게 정리하면 돼요:\n1) 권장안과 이유 한 줄\n2) 다른 선택지 1~2개와 각각의 대가\n3) 기한과, 그때까지 정하지 않으면 막히는 것\n\n더 깊은 비교(근거·대가 계산)는 Claude 연결 모드에서 해 드릴 수 있어요.`,
+        `<b>${esc(target.title)}</b> (기한 ${dueOf(target)})\n\n권장안: <b>${esc(target.recommend)}</b>\n\n결정 요청은 이렇게 정리하면 돼요:\n1) 권장안과 이유 한 줄\n2) 다른 선택지 1~2개와 각각의 대가\n3) 기한과, 그때까지 정하지 않으면 막히는 것\n\n더 깊은 비교(근거·대가 계산)는 Claude 연결 모드에서 해 드릴 수 있어요.`,
       );
     } else {
       addMessage(
         "bot",
         decisions.length
-          ? `오늘 결정할 일 ${decisions.length}건이에요.\n${decisions.map((d) => `• <b>${esc(d.title)}</b> — 권장: ${esc(d.recommend)} (기한 ${esc(d.due)})`).join("\n")}`
+          ? `결정할 일 ${decisions.length}건이에요${decisions.some((d) => d.dueInfo?.late) ? ` (기한 지남 ${decisions.filter((d) => d.dueInfo?.late).length}건)` : ""}.\n${decisions.map((d) => `• <b>${esc(d.title)}</b> — 권장: ${esc(d.recommend)} (기한 ${dueOf(d)})`).join("\n")}`
           : "지금 결정할 일은 없어요.",
       );
     }
@@ -930,8 +932,8 @@
         guess: i.guess || undefined,
         stale: i.stale || undefined,
       })),
-      decisions: m.project.decisions || [],
-      risks: m.project.risks || [],
+      decisions: m.decisions.map(({ dueInfo, ...d }) => ({ ...d, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late })),
+      risks: m.risks.map(({ dueInfo, ...r }) => ({ ...r, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late })),
       srs: m.project.srs
         ? {
             exists: m.project.srs.exists,

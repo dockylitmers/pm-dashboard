@@ -21,6 +21,8 @@
   // 일반 Markdown 표 칸 안의 | 와 줄바꿈
   const mdEsc = (text) => String(text ?? "").replace(/\|/g, "\\|").replace(/\n/g, "<br>");
   const catName = (project, id) => project.categories.find((c) => c.id === id)?.name || id;
+  // 기한: '10/16(금) · D-2', 날짜가 아닌 옛 값은 그대로
+  const dueText = (info) => (info.invalid ? info.raw : `${F.shortDate(info.date)} · ${info.label}`);
 
   function whyText(project, item) {
     const parts = [];
@@ -150,13 +152,13 @@
         out.push(`- ${item.title}${item.status === "requested" ? ` (요청 ${F.monthDay(item.requested)}${item.waitDays > Core.WAIT_LIMIT_DAYS ? `, D+${item.waitDays}` : ""})` : ""}${item.askBy ? ` — ${F.monthDay(item.blocksDate)} ${item.blocks} 전에 필요` : ""}`);
     }
     if (!client) {
-      if (project.decisions?.length) {
+      if (m.decisions?.length) {
         out.push("", "■ 결정 필요");
-        for (const d of project.decisions) out.push(`- ${d.title} — 권장: ${d.recommend}${d.due ? ` (기한 ${d.due})` : ""}`);
+        for (const d of m.decisions) out.push(`- ${d.title} — 권장: ${d.recommend}${d.dueInfo ? ` (기한 ${dueText(d.dueInfo)})` : ""}`);
       }
-      if (project.risks?.length) {
+      if (m.risks?.length) {
         out.push("", "■ 위험");
-        for (const r of project.risks.slice(0, 3)) out.push(`- ${r.title} → ${r.mitigation}`);
+        for (const r of m.risks.slice(0, 3)) out.push(`- ${r.title} → ${r.mitigation}${r.owner || r.dueInfo ? ` (${[r.owner && `담당 ${r.owner}`, r.dueInfo && `기한 ${dueText(r.dueInfo)}`].filter(Boolean).join(", ")})` : ""}`);
       }
     }
     return out.join("\n");
@@ -221,8 +223,8 @@
         for (const r of (project.contract?.review || []).filter((r) => r.status === "risk" || r.status === "missing")) out.push(`  - ${r.title}${r.note ? ` — ${r.note}` : ""}`);
         if (c.next) out.push(`- 다음 대금: ${c.next.name} ${c.next.ratio ? `${c.next.ratio}% ` : ""}(${c.next.trigger}${c.next.dueDate ? `, ${F.shortDate(c.next.dueDate)} 예정` : ""})`);
       }
-      for (const r of project.risks || []) out.push(`- 위험: ${r.title} → ${r.mitigation}`);
-      for (const dcs of project.decisions || []) out.push(`- 결정 필요: ${dcs.title} (권장: ${dcs.recommend})`);
+      for (const r of m.risks || []) out.push(`- 위험: ${r.title} → ${r.mitigation}${r.dueInfo ? ` (기한 ${dueText(r.dueInfo)})` : ""}`);
+      for (const dcs of m.decisions || []) out.push(`- 결정 필요: ${dcs.title} (권장: ${dcs.recommend}${dcs.dueInfo ? `, 기한 ${dueText(dcs.dueInfo)}` : ""})`);
     }
     return out.join("\n");
   }

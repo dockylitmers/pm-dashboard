@@ -193,7 +193,14 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 
 자동 실행은 macOS launchd 사용자 에이전트다(다른 OS는 cron 줄을 보여 준다). 설치 전에 사용자에게 시각, 전체·빠른, 서버를 켜 둘지 확인한다. 전체 업데이트는 하루 세 번 Claude 사용량이 든다. 결과의 '답해 주실 것'은 다음 대화에서 사용자에게 한 번에 묻는다.
 
-사용자가 결정을 내리면 `project.json`의 `decisions`에서 빼고 체크리스트·일정에 반영한다. 결정이 필요한 일은 권장안 먼저, 선택지 2~3개, 기한, 정하지 않으면 막히는 것을 적어 `decisions`에 둔다.
+### 결정 필요·위험
+
+결정이 필요한 일은 권장안 먼저, 선택지 2~3개, 기한, 정하지 않으면 막히는 것을 정리하고 `pm decision add "제목" --recommend "권장안" --due 2026-10-16 --src "출처"`로 둔다. 위험은 `pm risk add "제목" --level high|mid|low --detail … --mitigation … --owner 담당 --due 다시 볼 날`.
+
+- **기한은 날짜로 저장한다.** '오늘'·'이번 주'처럼 말로 들은 기한은 그대로 적지 말고 날짜로 바꾼다. `--due`에 '오늘'·'내일'·'이번 주'(그 주 금요일)·'다음 주'·'10/16'을 주면 CLI가 쓰는 날 기준 날짜로 바꾼다. 원본 글에 적힌 '오늘'은 그 글이 쓰인 날이다. 대시보드는 'D-2'·'2일 지남'으로 계산하고, 지난 결정을 할 일과 브리핑 맨 앞에 올린다.
+- 다시 확인했으면 `pm decision check <번호> --src 출처`, 기한·권장안이 바뀌면 `pm decision set <번호> --due … --src …`. 위험도 같다(`pm risk check|set`).
+- 사용자가 결정을 내리면 `pm decision done <번호>`로 빼고 결과를 체크리스트·일정에 반영한다. 끝난 위험은 `pm risk remove <번호>`.
+- 목록은 `pm decision`, `pm risk`(`--json`). `pm validate`가 날짜가 아닌 옛 기한을 경고한다.
 
 ## 대시보드
 
@@ -207,7 +214,7 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 
 ## project.json을 직접 고칠 때
 
-`pm` 명령으로 안 되는 변경(항목 추가, 결정·위험, 리소스, 날짜)은 파일을 직접 고치고 `pm validate`를 돌린다. 필드는 `references/data-model.md`.
+`pm` 명령으로 안 되는 변경(항목 추가, 리소스, 날짜)은 파일을 직접 고치고 `pm validate`를 돌린다. 결정·위험은 `pm decision`·`pm risk`로 고친다(기한을 날짜로 바꿔 주고 확인일을 남긴다). 필드는 `references/data-model.md`.
 
 - `need`, `fields`, `proposal`, `note`는 고객사 요청 목록과 공유본에 그대로 나간다. 결론만, 고객사 말로 쓴다.
 - 이슈 번호, 담당자, 내부 사정은 `internal`에 쓴다. 공유본에서 빠진다.
