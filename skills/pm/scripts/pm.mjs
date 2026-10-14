@@ -718,7 +718,7 @@ commands.schedule = (args) => {
   for (const id of w.ids()) {
     const rec = readUpdate(w, id);
     const u = rec?.last;
-    const st = Core.updateState(rec);
+    const st = Core.updateState(rec, { githubAt: w.github(id)?.syncedAt || null });
     console.log(`  ${pad(id, 22)}${u ? `${localTime(u.at)} · ${u.trigger === "schedule" ? "자동" : "수동"} · ${u.ok ? "" : "일부 실패 · "}${u.summary}` : "업데이트 기록 없음"}`);
     for (const f of st.failures) console.log(`  ${pad("", 22)}✗ ${f.text}`);
     if (st.sources.github || st.sources.client) console.log(`  ${pad("", 22)}기준: ${[st.sources.github && `GitHub ${localTime(st.sources.github)}`, st.sources.client && `고객사 답 ${localTime(st.sources.client)}`].filter(Boolean).join(" · ")}`);

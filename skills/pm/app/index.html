@@ -431,7 +431,7 @@
   .tl-bar.qa { background: var(--s3); color: var(--on-qa); }
   .tl-bar.review { background: var(--violet); color: var(--on-review); }
   .tl-bar.kickoff { background: var(--s-neutral); color: var(--on-kickoff); }
-  .tl-bar.sprint { background: var(--accent-wash); color: var(--accent-ink); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  .tl-bar.sprint { background: var(--accent-wash); color: var(--accent-ink); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); padding: 0 3px; justify-content: center; }
   .tl-bar.sprint.done { background: var(--surface-sunk); color: var(--ink-3); border-color: var(--line); }
   .tl-bar.sprint.late { background: var(--crit-wash); color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 40%, transparent); }
   .tl-bar .fill { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 22%, transparent); }
@@ -465,8 +465,8 @@
   .list-row .d { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
   .row-btn { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 0; }
   .row-btn:hover .t { color: var(--accent-ink); }
-  .row-btn.list-row { display: grid; border-top: 1px solid var(--grid); }
-  .row-btn.list-row:first-child { border-top: 0; }
+  .row-btn.list-row { display: grid; border-top: 1px solid var(--grid); padding: 8px 0; }
+  .row-btn.list-row:first-child { border-top: 0; padding-top: 2px; }
   .empty { padding: 28px 12px; text-align: center; color: var(--ink-3); font-size: 13px; }
   .empty b { display: block; color: var(--ink-2); font-size: 14px; margin-bottom: 4px; }
 
@@ -852,7 +852,7 @@
       <span class="topbar-spacer"></span>
       <button type="button" class="tool-btn" id="update-btn" data-internal title="원본을 다시 읽어 대시보드를 최신으로"><span id="update-icon" aria-hidden="true"></span><span id="update-label">업데이트</span></button>
       <!-- 보조 버튼: 넓은 화면에서는 그대로, 1400px 이하는 아이콘만, 모바일에서는 '더보기' 메뉴 안 -->
-      <button type="button" class="tool-btn more-btn" id="more-btn" aria-expanded="false" aria-controls="topbar-more" aria-label="더보기 메뉴"><span data-icon="more"></span><span class="badge zero" id="more-count" hidden>0</span></button>
+      <button type="button" class="tool-btn more-btn" id="more-btn" aria-expanded="false" aria-controls="topbar-more" aria-label="더보기 메뉴"><span data-icon="more"></span><span class="badge zero" id="more-count" data-internal hidden>0</span></button>
       <div class="topbar-more" id="topbar-more">
         <button type="button" class="tool-btn" id="queue-btn" data-internal title="승인 대기"><span data-icon="send"></span><span class="btn-label">승인 대기</span> <span class="badge zero" id="queue-count">0</span></button>
         <button type="button" class="tool-btn" id="client-view-btn" aria-pressed="false" title="고객사 공유 보기"><span data-icon="eye"></span><span class="btn-label">고객사 공유 보기</span></button>
