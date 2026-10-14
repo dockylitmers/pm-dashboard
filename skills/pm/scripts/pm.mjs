@@ -665,7 +665,7 @@ commands.update = async (args) => {
   for (const r of results) {
     const took = r.durationSec >= 90 ? `${Math.round(r.durationSec / 60)}분` : `${r.durationSec}초`;
     console.log(`${r.id}: ${r.ok ? "업데이트함" : "일부 실패"} · ${r.mode === "deep" ? "전체" : "빠른"} · ${took}${r.cost != null ? ` · 약 $${r.cost.toFixed(2)}` : ""} · ${r.summary}`);
-    for (const s of r.steps) console.log(`  ${s.ok ? "✓" : "✗"} ${s.name}: ${s.detail}`);
+    for (const s of r.steps) console.log(`  ${s.ok ? "✓" : "✗"} ${s.name}: ${s.ok ? s.detail : `${Core.explainStep(s).text} (원문: ${s.detail})`}`);
     for (const c of r.changed || []) console.log(`  · 바뀜 ${c.id}: ${c.what}`);
     for (const a of r.asks || []) console.log(`  ? 물어볼 것 ${a.id}: ${a.question}`);
   }
@@ -714,8 +714,12 @@ commands.schedule = (args) => {
   const busy = runningUpdate(w);
   if (busy) console.log(`지금 업데이트 중 (${busy.at} 시작)`);
   for (const id of w.ids()) {
-    const u = readUpdate(w, id)?.last;
+    const rec = readUpdate(w, id);
+    const u = rec?.last;
+    const st = Core.updateState(rec);
     console.log(`  ${pad(id, 22)}${u ? `${localTime(u.at)} · ${u.trigger === "schedule" ? "자동" : "수동"} · ${u.ok ? "" : "일부 실패 · "}${u.summary}` : "업데이트 기록 없음"}`);
+    for (const f of st.failures) console.log(`  ${pad("", 22)}✗ ${f.text}`);
+    if (st.sources.github || st.sources.client) console.log(`  ${pad("", 22)}기준: ${[st.sources.github && `GitHub ${localTime(st.sources.github)}`, st.sources.client && `고객사 답 ${localTime(st.sources.client)}`].filter(Boolean).join(" · ")}`);
   }
 };
 

@@ -520,6 +520,23 @@
   }
 
   // ---------------------------------------------------------------- 화면: 오늘
+  // 브리핑 머리의 기준 시각 한 줄: 'GitHub 오늘 12:30 · 고객사 답 10/13 18:34 · 추정 8'. 못 읽은 원본은 빨강과 아이콘
+  function freshLineHtml(model) {
+    if (CLIENT) return "";
+    const st = updateStateOf();
+    const fail = (key) => st.failures.find((f) => f.key === key);
+    const parts = [];
+    const ghAt = model.forecast?.syncedAt || st.sources.github;
+    if (ghAt || fail("github"))
+      parts.push(`<span class="${fail("github") ? "bad" : ""}">${fail("github") ? icon("alert") : ""}GitHub ${ghAt ? esc(whenLabel(ghAt)) : "받은 적 없음"}${fail("github") ? " (이번에 못 받음)" : ""}</span>`);
+    if (st.sources.client || fail("deep"))
+      parts.push(`<span class="${fail("deep") ? "bad" : ""}">${fail("deep") ? icon("alert") : ""}고객사 답 ${st.sources.client ? esc(whenLabel(st.sources.client)) : "읽은 적 없음"}${fail("deep") ? ` (이번에 못 읽음${fail("deep").retry ? ` · ${esc(fail("deep").retry)} 이후 다시` : ""})` : ""}</span>`);
+    if (st.state === "stale") parts.push(`<span class="old">${icon("alert")}업데이트 ${esc(agoLabel(st.ageHours))}</span>`);
+    const guess = model.recheck.filter((i) => i.guess).length;
+    if (model.recheck.length) parts.push(`<span>${guess === model.recheck.length ? `추정 ${guess}` : `다시 확인 ${model.recheck.length}${guess ? `(추정 ${guess})` : ""}`}</span>`);
+    if (!parts.length) return "";
+    return `<button class="fresh-line" data-update-open title="원본별 기준 시각 · 누르면 업데이트 창"><b>기준</b>${parts.join("")}<span class="go">자세히</span></button>`;
+  }
   const netWeek = (p) => Math.round(p.velocity) - Math.round(p.inflow);
   function renderOverview(model) {
     const { project, forecast, waiting, health, phase, gate } = model;
@@ -642,7 +659,8 @@
         <section class="card brief span-8" data-internal>
           <div class="brief-limi">${limiSvg({ size: 92, mood: health.key, progress: progressOf(model) })}</div>
           <div>
-            <div class="when">리미의 브리핑 · ${F.shortDate(today)}${forecast ? ` · GitHub ${esc(syncLabel(forecast.syncedAt))} 기준` : ""}</div>
+            <div class="when">리미의 브리핑 · ${F.shortDate(today)}</div>
+            ${freshLineHtml(model)}
             <h2>${esc(project.name)} · 지금 상태 ${chip(health)}</h2>
             ${factsHtml}
             <ol>${items.map((item, i) => `<li><button class="row-btn" data-brief="${i}" style="font-size:14px">${item.text}</button></li>`).join("")}</ol>
@@ -832,7 +850,7 @@
       ${CLIENT ? `<p>${goal ? esc(goal) : '<span class="muted">목표가 없습니다</span>'}</p>` : `<label class="sr-only" for="sp-goal">스프린트 목표</label><textarea id="sp-goal" rows="3" placeholder="이 스프린트가 끝나면 무엇이 되어 있어야 하나요? 예: 결제·환불 흐름을 고객 화면에서 끝까지 쓸 수 있다">${esc(goal)}</textarea>
       <div class="btn-row" style="margin-top:8px"><button class="btn accent" id="sp-save">${icon("ok")}목표 저장</button>${SERVER ? "" : '<span class="muted" style="font-size:12px">이 브라우저에만 저장됩니다. pm serve로 열면 파일에 저장됩니다.</span>'}</div>`}
       ${mine.length ? `<div class="section-title">${icon("list")}열린 이슈 ${open.length}</div>${open.length ? `<div class="list">${open.map(issueRow).join("")}</div>` : '<p class="muted">없습니다.</p>'}
-      <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">닫힌 이슈 ${closed.length}</summary><div class="list">${closed.map(issueRow).join("")}</div></details>` : CLIENT ? "" : '<p class="muted" style="margin-top:12px">이슈 목록은 GitHub 스냅샷에서 옵니다(pm sync).</p>'}
+      <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">닫힌 이슈 ${closed.length}</summary><div class="list">${closed.map(issueRow).join("")}</div></details>` : CLIENT ? "" : '<p class="muted" style="margin-top:12px">이슈 목록은 GitHub 업데이트 때 받습니다(상단 ‘업데이트’).</p>'}
       ${project.github?.repoUrl && !CLIENT ? `<p style="margin-top:14px"><a href="${esc(project.github.repoUrl)}/milestone/${v.number}" target="_blank" rel="noopener">${icon("ext")}GitHub 마일스톤 열기</a></p>` : ""}`;
     openDrawer({ kicker: `${icon("flag")} ${v.isSprint ? "스프린트" : "마일스톤"}`, title: v.title, sub: `${st}${v.isCurrent ? ' <span class="muted">지금 스프린트</span>' : ""}`, body });
     $("#sp-save")?.addEventListener("click", () => {
@@ -1663,7 +1681,7 @@
     if (!base?.project) {
       return `<div class="view-head"><div><h1>일정·속도</h1><p>${esc(project.name)}</p></div></div>
         <section class="card" id="schedule-detail" style="margin-bottom:16px"><div class="card-head"><div class="ch-title"><h2>WBS</h2><span class="sub">단계 → 스프린트·주요 일정</span></div></div>${wbsHtml(model)}</section>
-        <section class="card"><div class="empty"><b>이슈 트래커가 아직 연결되지 않았어요</b>개발 이슈가 쌓이면 처리·유입 속도로 완료일을 예측합니다.<br/>GitHub 저장소를 정한 뒤 project.json의 github.repo에 저장소(owner/repo)를 적고 <code>pm sync --project ${esc(project.id)}</code>를 실행하세요.</div></section>`;
+        <section class="card"><div class="empty"><b>이슈 트래커가 아직 연결되지 않았어요</b>개발 이슈가 쌓이면 처리·유입 속도로 완료일을 예측합니다.<br/>GitHub 저장소를 정한 뒤 project.json의 github.repo에 저장소(owner/repo)를 적고 상단 ‘업데이트’를 누르거나 <code>pm update --project ${esc(project.id)}</code>를 실행하세요.</div></section>`;
     }
     const s = state.scenario;
     const scenarioOn = s.velocityPct || s.inflowPct || s.descope;
@@ -1681,7 +1699,7 @@
 
     return `
       <div class="view-head">
-        <div><h1>일정·속도</h1><p>GitHub 이슈 ${fmt(f.issues.length)}건 · ${esc(syncLabel(f.syncedAt))} 동기화 · 최근 4주 가중 평균, 낙관·비관 ±40%</p></div>
+        <div><h1>일정·속도</h1><p>GitHub 이슈 ${fmt(f.issues.length)}건 · ${esc(syncLabel(f.syncedAt))} 기준 · 최근 4주 가중 평균, 낙관·비관 ±40%</p></div>
         <div>${chip(st, `${p.targetLabel} 예측 ${st.label}`)}</div>
       </div>
       <section class="card" id="schedule-detail" style="margin-bottom:16px">
@@ -1886,7 +1904,7 @@
     const option = (value, label, current) =>
       `<option value="${esc(value)}" ${String(current) === String(value) ? "selected" : ""}>${esc(label)}</option>`;
     return `
-      <div class="view-head"><div><h1>이슈</h1><p>GitHub ${esc(forecast.syncedAt ? syncLabel(forecast.syncedAt) : "")} 스냅샷 · 열린 이슈 ${fmt(open.length)}건</p></div><a class="btn" href="${esc(repoUrl)}/issues" target="_blank" rel="noopener">${icon("ext")}GitHub에서 열기</a></div>
+      <div class="view-head"><div><h1>이슈</h1><p>GitHub ${esc(forecast.syncedAt ? syncLabel(forecast.syncedAt) : "")} 기준 · 열린 이슈 전체 ${fmt(open.length)}건</p></div><a class="btn" href="${esc(repoUrl)}/issues" target="_blank" rel="noopener">${icon("ext")}GitHub에서 열기</a></div>
       <div class="stats" style="margin-bottom:16px">
         <div class="card stat"><div class="stat-label">열린 이슈</div><div class="stat-value num">${fmt(open.length)}</div><div class="stat-note">버그 ${fmt(bugs)} · 기능 ${fmt(open.filter((i) => i.labels.includes("enhancement")).length)}</div></div>
         <div class="card stat"><div class="stat-label">고객사·논의 대기</div><div class="stat-value num">${fmt(waitingClient.length)}</div><div class="stat-note">${clientLabels.map((l) => `‘${esc(l)}’`).join(", ")} 라벨</div></div>
@@ -1926,7 +1944,7 @@
     const resources = (project.resources || []).map((r) => ({ ...r, url: resourceUrl(project, r.id) ?? r.url }));
     const statusChip = (r) =>
       r.url
-        ? chip({ cls: "good", icon: "ok" }, r.sync ? "동기화" : "링크 연결")
+        ? chip({ cls: "good", icon: "ok" }, r.sync ? "업데이트" : "링크 연결")
         : chip({ cls: "crit", icon: "plug" }, "연결 안 됨");
     const hasKey = (() => {
       try {
@@ -1952,7 +1970,7 @@
         <section class="card span-4">
           <div class="card-head"><h2>연결 상태</h2></div>
           <div class="list">
-            <div class="list-row"><div><div class="t">GitHub 이슈</div><div class="d">${forecast ? `${esc(syncLabel(forecast.syncedAt))} 스냅샷 · ${fmt(forecast.issues.length)}건` : "연결 전"}</div></div>${forecast ? chip({ cls: "good", icon: "ok" }, "동기화") : chip({ cls: "crit", icon: "plug" }, "없음")}</div>
+            <div class="list-row"><div><div class="t">GitHub 이슈</div><div class="d">${forecast ? `${esc(syncLabel(forecast.syncedAt))} 기준 · ${fmt(forecast.issues.length)}건` : "연결 전"}</div></div>${forecast ? chip({ cls: "good", icon: "ok" }, "업데이트") : chip({ cls: "crit", icon: "plug" }, "없음")}</div>
             <div class="list-row"><div><div class="t">고객 요청 DB</div><div class="d">${project.channels?.notion?.url ? "링크 연결 · 상태는 체크리스트에서 관리" : "연결 전"}</div></div>${project.channels?.notion?.url ? chip({ cls: "info", icon: "link" }, "링크") : chip({ cls: "crit", icon: "plug" }, "없음")}</div>
             <div class="list-row" data-internal><div><div class="t">리미 (Claude)</div><div class="d">${hasKey ? "Claude 연결됨" : "내장 모드 · 대화창에서 키를 넣으면 Claude로 답합니다"}</div></div>${hasKey ? chip({ cls: "good", icon: "ok" }, "연결") : chip({ cls: "neutral", icon: "minus" }, "내장")}</div>
           </div>
@@ -2253,23 +2271,45 @@
   };
 
   // ---------------------------------------------------------------- 업데이트
-  const hhmm = (iso) => {
-    const d = new Date(iso);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  };
+  // 시각은 KST로 보여 준다(브라우저 시간대와 상관없이)
+  const kstClock = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const hhmm = (iso) => kstClock.format(new Date(iso));
   const whenLabel = (iso) => (F.kstDate(new Date(iso)) === realToday() ? `오늘 ${hhmm(iso)}` : `${F.monthDay(F.kstDate(new Date(iso)))} ${hhmm(iso)}`);
+  const agoLabel = (hours) => (hours < 48 ? `${Math.max(1, Math.round(hours))}시간 전` : `${Math.round(hours / 24)}일 전`);
   const lastUpdate = (id = state.projectId) => upd.last[id]?.last || null;
-  const updateIsStale = (u) => !u || !u.ok || (Date.now() - new Date(u.at).getTime()) / 3_600_000 > UPDATE_STALE_HOURS;
+  // 업데이트 상태(실패·오래됨·정상)와 원본별 기준 시각. GitHub 시각은 화면이 실제로 쓰는 스냅샷 시각
+  function updateStateOf(id = state.projectId) {
+    const project = PROJECTS[id];
+    const gh = project?.github && GITHUB[project.github.key];
+    return Core.updateState(upd.last[id], { staleHours: UPDATE_STALE_HOURS, githubAt: gh?.syncedAt || null });
+  }
 
   function paintUpdateButton() {
     const btn = $("#update-btn");
     if (!btn) return;
-    const u = lastUpdate();
-    btn.classList.toggle("running", !!upd.running);
-    btn.classList.toggle("stale", !upd.running && updateIsStale(u));
+    const st = updateStateOf();
+    const u = st.last;
+    const running = !!upd.running;
+    btn.classList.toggle("running", running);
+    btn.classList.toggle("failed", !running && st.state === "failed");
+    btn.classList.toggle("stale", !running && st.state === "stale");
     const asks = u?.asks?.length || 0;
-    $("#update-label").textContent = upd.running ? "업데이트 중…" : u ? `업데이트 ${whenLabel(u.at)}${asks ? ` · 답할 것 ${asks}` : ""}` : "업데이트";
-    btn.title = upd.running ? "원본을 다시 읽는 중" : u ? `마지막 업데이트 ${whenLabel(u.at)}${u.ok ? "" : " (일부 실패)"}` : "아직 업데이트한 적 없음";
+    $("#update-icon").innerHTML = icon(!running && (st.state === "failed" || st.state === "stale") ? "alert" : "refresh");
+    $("#update-label").textContent = running
+      ? "업데이트 중…"
+      : st.state === "never"
+        ? "업데이트"
+        : st.state === "failed"
+          ? "업데이트 일부 실패"
+          : st.state === "stale"
+            ? `업데이트 ${agoLabel(st.ageHours)}`
+            : `업데이트 ${whenLabel(u.at)}${asks ? ` · 답할 것 ${asks}` : ""}`;
+    const sources = [st.sources.github && `GitHub ${whenLabel(st.sources.github)}`, st.sources.client && `고객사 답 ${whenLabel(st.sources.client)}`].filter(Boolean).join(" · ");
+    btn.title = running
+      ? "원본을 다시 읽는 중"
+      : u
+        ? [`마지막 업데이트 ${whenLabel(u.at)}`, sources && `기준: ${sources}`, ...st.failures.map((f) => f.text)].filter(Boolean).join("\n")
+        : "아직 업데이트한 적 없음";
   }
 
   async function fetchUpdateStatus() {
@@ -2295,7 +2335,8 @@
       if (!data.running) {
         clearInterval(upd.timer);
         const u = lastUpdate();
-        toast(u?.ok ? `업데이트했습니다 · ${u.summary}` : `업데이트가 일부 실패했습니다 · ${u?.error || ""}`);
+        const failed = (u?.steps || []).find((s) => !s.ok);
+        toast(u?.ok ? `업데이트했습니다 · ${u.summary}` : `업데이트가 일부 실패했습니다 · ${failed ? Core.explainStep(failed).text : u?.error || ""}`);
         // 새 스냅샷과 값을 화면에 넣으려면 페이지를 다시 받는다
         setTimeout(() => location.reload(), 900);
       }
@@ -2320,8 +2361,22 @@
 
   const KIND = { guess: { cls: "warn", label: "추정" }, moved: { cls: "info", label: "GitHub 바뀜" }, stale: { cls: "neutral", label: "오래됨" } };
   function openUpdateDrawer() {
-    const u = lastUpdate();
+    const st = updateStateOf();
+    const u = st.last;
     const history = (upd.last[state.projectId]?.history || []).slice(0, 6);
+    const sourceLine = [st.sources.github && `GitHub 이슈 ${whenLabel(st.sources.github)}`, st.sources.client && `고객사 답 ${whenLabel(st.sources.client)}`].filter(Boolean).join(" · ");
+    // 실패하면 무엇을 못 읽었는지·왜·언제 다시 하는지를 맨 위에, 원문은 접어 둔다
+    const alert =
+      st.state === "failed"
+        ? st.failures
+            .map(
+              (f) =>
+                `<div class="callout crit" style="margin-bottom:10px">${icon("alert")}<span><b>${esc(f.text)}</b><small>${f.key === "deep" ? `지금 화면의 고객사 답은 ${st.sources.client ? `${esc(whenLabel(st.sources.client))} 기준` : "아직 읽은 적이 없어요"}이에요.` : f.key === "github" ? `일정·이슈는 ${st.sources.github ? `${esc(whenLabel(st.sources.github))} 기준` : "아직 받은 적이 없어요"}이에요.` : ""}${sourceLine ? ` 기준 시각: ${esc(sourceLine)}` : ""}</small><details><summary>원문</summary>${esc(f.raw)}</details></span></div>`,
+            )
+            .join("")
+        : st.state === "stale"
+          ? `<div class="callout warn" style="margin-bottom:10px">${icon("alert")}<span><b>마지막 업데이트가 ${esc(agoLabel(st.ageHours))}이에요</b><small>자동 업데이트가 꺼졌거나 이 PC가 잠들어 있었을 수 있어요. ${SERVER ? "아래 ‘빠른 업데이트’로 GitHub부터 다시 받으세요." : "pm serve로 열어 업데이트하세요."}${sourceLine ? ` 기준 시각: ${esc(sourceLine)}` : ""}</small></span></div>`
+          : "";
     const schedule = upd.schedule
       ? `<div class="callout">${icon("clock")}<span>자동 업데이트 <b>매일 ${esc(upd.schedule.times.join(" · "))}</b> · ${upd.schedule.deep ? "전체(Claude가 원본을 읽고 반영)" : "빠른(GitHub·다시 확인할 값)"}${upd.schedule.loaded === false ? " (등록됐지만 꺼져 있음)" : ""}${upd.schedule.deep ? "" : ". 원본까지 반영하려면 터미널에서 <code>pm schedule install --deep</code>"}</span></div>`
       : `<div class="callout warn">${icon("clock")}<span>자동 업데이트가 꺼져 있습니다. 터미널에서 <code>pm schedule install --deep</code>을 실행하면 매일 08:30 · 12:30 · 18:30에 Claude가 원본을 읽고 반영하고, 이 서버도 계속 켜 둡니다. 필요한 세팅은 <code>pm doctor</code>가 점검합니다.</span></div>`;
@@ -2334,9 +2389,13 @@
         <p class="muted" style="font-size:12px;margin:0 0 12px">빠른: GitHub 이슈·마일스톤을 새로 받고 다시 확인할 값을 계산합니다(몇 초). ${upd.deepReady ? "전체: Claude가 GitHub 코멘트와 Notion 요청 페이지를 읽고 바뀐 값을 반영합니다(몇 분). 원본에는 쓰지 않습니다." : "전체 업데이트는 이 PC에 Claude Code가 있어야 합니다(pm doctor)."}</p>`
       : `<div class="callout" style="margin:12px 0">${icon("plug")}<span>이 화면은 파일로 연 대시보드라 여기서 업데이트할 수 없습니다. <code>pm serve --open</code>으로 열면 버튼이 생깁니다.</span></div>`;
     const last = u
-      ? `<div class="section-title">${icon("ok")}마지막 업데이트</div>
-        <p style="margin:0 0 8px"><b>${esc(whenLabel(u.at))}</b> · ${u.trigger === "schedule" ? "자동" : u.trigger === "dashboard" ? "대시보드" : "터미널"} · ${u.mode === "deep" ? "전체" : "빠른"} · ${u.durationSec >= 90 ? `${Math.round(u.durationSec / 60)}분` : `${u.durationSec}초`}${u.ok ? "" : ` · <span class="chip crit">${icon("alert")}일부 실패</span>`}</p>
-        <ul class="update-steps">${(u.steps || []).map((st) => `<li>${chip({ cls: st.ok ? "good" : "crit", icon: st.ok ? "ok" : "alert" }, st.name)}<span class="muted">${esc(st.detail)}</span></li>`).join("")}</ul>
+      ? `<div class="section-title">${icon(u.ok ? "ok" : "alert")}마지막 업데이트</div>
+        <p style="margin:0 0 4px"><b>${esc(whenLabel(u.at))}</b> · ${u.trigger === "schedule" ? "자동" : u.trigger === "dashboard" ? "대시보드" : "터미널"} · ${u.mode === "deep" ? "전체" : "빠른"} · ${u.durationSec >= 90 ? `${Math.round(u.durationSec / 60)}분` : `${u.durationSec}초`}${u.ok ? "" : ` · <span class="chip crit">${icon("alert")}일부 실패</span>`}</p>
+        ${sourceLine ? `<p class="soft" style="margin:0 0 8px;font-size:12.5px">기준 시각: ${esc(sourceLine)}</p>` : ""}
+        <ul class="update-steps">${(u.steps || []).map((s) => {
+          const why = s.ok ? null : Core.explainStep(s);
+          return `<li>${chip({ cls: s.ok ? "good" : "crit", icon: s.ok ? "ok" : "alert" }, s.name)}<span class="${s.ok ? "muted" : ""}" ${why ? `title="${esc(why.raw)}"` : ""}>${esc(why ? `${why.reason || "실패"}${why.retry ? ` · ${why.retry} 이후 다시 시도` : ""}` : s.detail)}</span></li>`;
+        }).join("")}</ul>
         ${u.mode === "deep" && u.summary ? `<div class="callout" style="margin-top:10px">${icon("sparkles")}<span>${esc(u.summary)}</span></div>` : ""}
         ${u.asks?.length ? `<div class="section-title">${icon("chat")}답해 주실 것 ${u.asks.length}개</div><div class="list">${u.asks.map((a) => `<button class="row-btn list-row" data-item="${esc(a.id)}"><div><div class="t">${esc(a.question)}</div><div class="d">${esc(getModel().checklist.find((i) => i.id === a.id)?.title || a.id)}</div></div></button>`).join("")}</div>` : ""}
         ${u.changed?.length ? `<div class="section-title">${icon("ok")}이번에 바뀐 값 ${u.changed.length}개</div><div class="list">${u.changed.map((c) => `<button class="row-btn list-row" data-item="${esc(c.id)}"><div><div class="t">${esc(getModel().checklist.find((i) => i.id === c.id)?.title || c.id)}</div><div class="d">${esc(c.what)}</div></div></button>`).join("")}</div>` : ""}
@@ -2346,16 +2405,20 @@
             ? `<div class="list">${u.recheckItems
                 .map((r) => `<button class="row-btn list-row" data-item="${esc(r.id)}"><div><div class="t">${esc(r.title)}</div>${r.github?.length ? `<div class="d">${esc(r.github.join(", "))}</div>` : ""}</div>${chip({ cls: KIND[r.kind]?.cls || "neutral", icon: "minus" }, KIND[r.kind]?.label || r.kind)}</button>`)
                 .join("")}</div>
-              <p class="muted" style="font-size:12px">값을 원본과 대조해 반영하려면 Claude에게 “최신화해 줘”라고 하세요. 직접 확인했다면 항목을 열어 ‘지금 확인함’을 누릅니다.</p>`
+              <p class="muted" style="font-size:12px">값을 원본과 대조해 반영하려면 전체 업데이트를 하거나 Claude에게 “업데이트해 줘”라고 하세요. 직접 확인했다면 항목을 열어 ‘지금 확인함’을 누릅니다.</p>`
             : `<p class="muted">없습니다. 모든 값이 최근에 원본에서 확인됐어요.</p>`
         }`
       : `<p class="muted">아직 업데이트한 적이 없습니다.</p>`;
-    const past = history.length > 1 ? `<div class="section-title">${icon("clock")}기록</div><ul class="history">${history.map((h) => `<li><span class="num">${esc(whenLabel(h.at))}</span><span>${h.trigger === "schedule" ? "자동" : "수동"}${h.mode === "deep" ? "·전체" : ""} · ${esc(h.summary || "")}</span></li>`).join("")}</ul>` : "";
+    // 기록: 실패한 실행은 칩과 이유로 표시한다(성공처럼 보이지 않게)
+    const past = history.length > 1 ? `<div class="section-title">${icon("clock")}기록</div><ul class="history">${history.map((h, i) => {
+      const reason = !h.ok && (h.error || (i === 0 && u?.error)) ? Core.explainStep({ key: h.mode === "deep" ? "deep" : "github", detail: h.error || u.error }).reason : null;
+      return `<li><span class="num">${esc(whenLabel(h.at))}</span><span>${h.ok ? "" : `<span class="chip crit">${icon("alert")}실패</span>`}${h.trigger === "schedule" ? "자동" : "수동"}${h.mode === "deep" ? "·전체" : ""} · ${esc(reason ? `${reason} · ${h.summary || ""}` : h.summary || "")}</span></li>`;
+    }).join("")}</ul>` : "";
     openDrawer({
       kicker: `${icon("refresh")} 업데이트`,
       title: "원본에서 다시 읽기",
-      sub: upd.running ? `<span class="chip info">${icon("clock")}업데이트 중</span>` : u ? `마지막 ${esc(whenLabel(u.at))}` : "",
-      body: `<div id="update-drawer">${schedule}${action}${last}${past}</div>`,
+      sub: upd.running ? `<span class="chip info">${icon("clock")}업데이트 중</span>` : u ? `${st.state === "failed" ? `<span class="chip crit">${icon("alert")}일부 실패</span> ` : st.state === "stale" ? `<span class="chip warn">${icon("alert")}${esc(agoLabel(st.ageHours))}</span> ` : ""}마지막 ${esc(whenLabel(u.at))}` : "",
+      body: `<div id="update-drawer">${alert}${schedule}${action}${last}${past}</div>`,
     });
     $("#update-run")?.addEventListener("click", () => startUpdate(false));
     $("#update-deep")?.addEventListener("click", () => startUpdate(true));
@@ -2385,9 +2448,6 @@
     $("#nav-issues").textContent = forecast
       ? fmt(forecast.issues.filter((i) => i.state === "open").length)
       : "";
-    $("#sync-info").textContent = forecast
-      ? `GitHub ${syncLabel(forecast.syncedAt)} 스냅샷`
-      : "GitHub 연결 전";
     $("#brand-sub").textContent = `${company} 외주 개발`;
     paintUpdateButton();
     for (const btn of $$(".nav-btn"))

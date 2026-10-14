@@ -344,6 +344,67 @@
     };
   }
 
+  // ---------------------------------------------------------------- 업데이트 기록(update.json) 읽기
+  // 단계별로 무엇을 읽는지. 실패하면 이 원본의 값이 이전 시각 기준으로 남는다
+  const STEP_SOURCE = {
+    github: { label: "GitHub 이슈", obj: "GitHub 이슈를" },
+    recheck: { label: "연결된 GitHub 이슈 상태", obj: "연결된 GitHub 이슈 상태를" },
+    deep: { label: "고객사 답(Notion)·GitHub 코멘트", obj: "고객사 답(Notion)·GitHub 코멘트를" },
+  };
+  const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  const clock = (h, m, ampm) => {
+    let hour = Number(h);
+    if (/pm/i.test(ampm || "") && hour < 12) hour += 12;
+    if (/am/i.test(ampm || "") && hour === 12) hour = 0;
+    return `${String(hour).padStart(2, "0")}:${String(Number(m || 0)).padStart(2, "0")}`;
+  };
+  const stepKey = (step) => step.key || (/GitHub 이슈/.test(step.name || "") ? "github" : /Claude|원본 확인/.test(step.name || "") ? "deep" : "recheck");
+
+  // 실패한 단계의 원문(영어 오류 등)을 쉬운 말로: 무엇을 못 읽었는지, 왜, 언제 다시 하면 되는지
+  function explainStep(step) {
+    const key = stepKey(step);
+    const raw = String(step.detail || "");
+    let reason = null;
+    let retry = null;
+    if (/hit your .*limit|usage limit|weekly limit|limit reached|rate.?limit|\b429\b|사용 한도/i.test(raw)) {
+      reason = /weekly|주간/i.test(raw) ? "Claude 주간 사용 한도" : "Claude 사용 한도";
+      const md = raw.match(/resets?\s+(?:on\s+)?([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:,?\s*(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)?/i);
+      const hm = raw.match(/resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+      if (md && MONTHS[md[1].slice(0, 3).toLowerCase()]) retry = `${MONTHS[md[1].slice(0, 3).toLowerCase()]}/${Number(md[2])}${md[3] ? ` ${clock(md[3], md[4], md[5])}` : ""}`;
+      else if (hm) retry = clock(hm[1], hm[2], hm[3]);
+    } else if (/claude 명령을 찾지|ENOENT|command not found/i.test(raw)) reason = "이 PC에서 Claude Code를 찾지 못함(pm doctor)";
+    else if (/결과 JSON|JSON/i.test(raw)) reason = "Claude 결과를 읽지 못함";
+    else if (/SIGTERM|timed?\s?out|시간 초과|ETIMEDOUT/i.test(raw)) reason = "시간 초과";
+    else if (/\b40[13]\b|bad credentials|unauthori[sz]ed|auth|로그인/i.test(raw)) reason = key === "deep" ? "Claude·Notion 로그인 필요(pm doctor)" : "GitHub 로그인 필요(gh auth login)";
+    else if (/ENOTFOUND|EAI_AGAIN|ECONN|network|fetch failed|socket/i.test(raw)) reason = "네트워크 연결 실패";
+    const src = STEP_SOURCE[key] || { label: step.name, obj: `${step.name}을(를)` };
+    return {
+      key,
+      source: src.label,
+      reason,
+      retry,
+      raw,
+      text: `${src.obj} 못 읽었어요 · ${reason || "원인은 원문 참고"} · ${retry ? `${retry} 이후 다시 시도` : "다음 업데이트 때 다시 시도"}`,
+    };
+  }
+
+  // 업데이트 상태: 실패(일부 원본을 못 읽음) · 오래됨(staleHours 넘게 업데이트 없음) · 정상 · 기록 없음
+  // sources는 원본별 마지막 성공 시각. 0.8 이전 기록에는 없어서 기록과 GitHub 스냅샷 시각으로 대신 계산한다
+  function updateState(rec, { now = Date.now(), staleHours = 12, githubAt = null } = {}) {
+    const last = rec?.last || null;
+    const history = rec?.history || [];
+    if (!last) return { state: "never", last: null, ageHours: null, sources: { github: githubAt, client: null }, failures: [], history };
+    const steps = last.steps || [];
+    const stepOk = (key) => steps.some((s) => stepKey(s) === key && s.ok);
+    const sources = {
+      github: githubAt || last.sources?.github || (stepOk("github") ? last.at : null),
+      client: last.sources?.client || (last.mode === "deep" && stepOk("deep") ? last.at : history.find((h) => h.mode === "deep" && h.ok)?.at || null),
+    };
+    const ageHours = (now - new Date(last.at).getTime()) / 3_600_000;
+    const failures = steps.filter((s) => !s.ok).map(explainStep);
+    return { state: !last.ok ? "failed" : ageHours > staleHours ? "stale" : "ok", last, ageHours, sources, failures, history };
+  }
+
   const escHtml = (value) =>
     String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
   const num = (n) => (n == null || Number.isNaN(n) ? "-" : Math.round(n).toLocaleString("ko-KR"));
@@ -511,6 +572,8 @@
     dayLabel,
     dueInfo,
     freshOf,
+    explainStep,
+    updateState,
     labels,
     anchorDates,
     fill,
