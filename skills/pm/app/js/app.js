@@ -208,8 +208,8 @@
   const briefing = (model = getModel()) => Core.briefing(model).map((item) => ({ ...item, text: item.html }));
 
   // ---------------------------------------------------------------- 리미 캐릭터 (리트머스 시험지)
-  // 색은 프로젝트 상태(파랑 순항 · 보라 주의 · 빨강 위험), 물든 높이는 진행률
-  const LIMI_COLORS = { good: "#2a78d6", watch: "#7a5ce0", risk: "#d03b3b" };
+  // 색은 프로젝트 상태(초록 순항 · 주황 주의 · 빨강 위험, 상태 칩과 같은 색), 물든 높이는 진행률
+  const LIMI_COLORS = { good: "#0ca30c", watch: "#f0a20f", risk: "#d03b3b" };
   function limiSvg({
     size = 48,
     mood = "good",
@@ -513,7 +513,7 @@
     const kinds = new Set(project.phases.map((phase) => phase.kind));
     const legend = [
       ["kickoff", "킥오프·준비", "var(--s-neutral)"],
-      ["dev", "개발", "var(--s1)"],
+      ["dev", "개발", "var(--bar-dev)"],
       ["qa", "고객사 QA", "var(--s3)"],
       ["review", "스토어 심사", "var(--violet)"],
     ]
@@ -1196,23 +1196,48 @@
   }
 
   // ---------------------------------------------------------------- 서랍
+  // 서랍: 닫혀 있으면 inert(Tab·스크린리더에서 빠짐), 열려 있으면 포커스를 안에 가둔다(아래 keydown)
   let lastFocus = null;
   function openDrawer({ kicker = "", title, sub = "", body }) {
-    lastFocus = document.activeElement;
+    const drawer = $("#drawer");
+    // 이미 열린 서랍의 내용만 바꿀 때는 처음 연 곳을 기억해 둔다
+    if (!drawer.classList.contains("open")) lastFocus = document.activeElement;
     $("#drawer-kicker").innerHTML = kicker;
     $("#drawer-title").textContent = title;
     $("#drawer-sub").innerHTML = sub;
     $("#drawer-body").innerHTML = body;
-    $("#drawer").classList.add("open");
-    $("#drawer").setAttribute("aria-hidden", "false");
+    drawer.inert = false;
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
     $("#scrim").classList.add("open");
     $("#drawer-close").focus();
   }
   function closeDrawer() {
-    $("#drawer").classList.remove("open");
-    $("#drawer").setAttribute("aria-hidden", "true");
+    const drawer = $("#drawer");
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
+    drawer.inert = true;
     $("#scrim").classList.remove("open");
     lastFocus?.focus?.();
+  }
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+  // Tab·Shift+Tab이 열린 서랍(모달) 밖으로 나가지 않게 처음과 끝을 잇는다
+  function trapFocus(event, container) {
+    const nodes = [...container.querySelectorAll(FOCUSABLE)].filter((el) => el.getClientRects().length && !el.closest("[inert]"));
+    if (!nodes.length) return;
+    const first = nodes[0];
+    const last = nodes.at(-1);
+    const active = document.activeElement;
+    if (!container.contains(active)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function openItem(itemId, preset = {}) {
@@ -1645,13 +1670,18 @@
       });
       hydrateIcons($("#modal"));
     };
+    if (!$("#modal").classList.contains("open")) modalReturn = document.activeElement;
+    $("#modal").inert = false;
     $("#modal").classList.add("open");
     renderStep();
     $("[data-close-modal].icon-btn").focus();
   }
   const toggleSet = (set, key, on) => (on ? set.add(key) : set.delete(key));
+  let modalReturn = null;
   function closeModal() {
     $("#modal").classList.remove("open");
+    $("#modal").inert = true;
+    modalReturn?.focus?.();
   }
 
   // SRS 초안 구조. 표시: 확인 요청(고객 답 필요) · 제안(PM이 채운 값) · 준비 필요(고객사가 준비) · 확정
@@ -2699,6 +2729,10 @@
     if (t.dataset.askLimi) return window.PMAgent?.ask(t.dataset.askLimi);
   });
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Tab") {
+      if ($("#modal").classList.contains("open")) trapFocus(event, $(".modal-box"));
+      else if ($("#drawer").classList.contains("open")) trapFocus(event, $("#drawer"));
+    }
     if (event.key === "Escape") {
       if ($("#modal").classList.contains("open")) closeModal();
       else if ($("#drawer").classList.contains("open")) closeDrawer();

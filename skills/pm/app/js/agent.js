@@ -13,8 +13,8 @@
   const KEY_STORE = "pm-dashboard:anthropic-key";
   const MODEL = "claude-opus-5-5";
   const MOOD_TEXT = {
-    good: "프로젝트가 순항 중이라 파랗게 물들었어요",
-    watch: "주의할 게 있어 보라색이에요",
+    good: "프로젝트가 순항 중이라 초록으로 물들었어요",
+    watch: "주의할 게 있어 주황빛이에요",
     risk: "위험 신호가 있어 빨갛게 물들었어요",
   };
 
@@ -148,7 +148,7 @@
     const items = App.briefing(model);
     addMessage(
       "bot",
-      `안녕하세요, ${esc(model.project.name)} 대시보드를 맡고 있는 리미예요. 지금 프로젝트는 <b>${esc(model.health.label)}</b> 상태라 몸이 ${model.health.key === "good" ? "파랗게" : model.health.key === "watch" ? "보랏빛으로" : "빨갛게"} 물들었어요.\n\n${items.map((item, i) => `${i + 1}. ${item.text}`).join("\n")}\n\n일정·고객사 요청·SRS 무엇이든 물어보세요. 고객사에 보낼 글은 제가 초안을 쓰고, 보내는 건 승인 뒤에 사람이 해요.`,
+      `안녕하세요, ${esc(model.project.name)} 대시보드를 맡고 있는 리미예요. 지금 프로젝트는 <b>${esc(model.health.label)}</b> 상태라 몸이 ${model.health.key === "good" ? "초록으로" : model.health.key === "watch" ? "주황빛으로" : "빨갛게"} 물들었어요.\n\n${items.map((item, i) => `${i + 1}. ${item.text}`).join("\n")}\n\n일정·고객사 요청·SRS 무엇이든 물어보세요. 고객사에 보낼 글은 제가 초안을 쓰고, 보내는 건 승인 뒤에 사람이 해요.`,
     );
   }
 
@@ -686,7 +686,7 @@
   }
 
   // ---------------------------------------------------------------- Claude 모드
-  const SYSTEM = `너는 '리미'다. ${App.company}(외주 개발사)의 PM 대시보드를 관리하는 PM 에이전트 캐릭터이고, 리트머스 시험지 모양이라 프로젝트 상태에 따라 색이 바뀐다(파랑 순항, 보라 주의, 빨강 위험).
+  const SYSTEM = `너는 '리미'다. ${App.company}(외주 개발사)의 PM 대시보드를 관리하는 PM 에이전트 캐릭터이고, 리트머스 시험지 모양이라 프로젝트 상태에 따라 색이 바뀐다(초록 순항, 주황 주의, 빨강 위험 — 대시보드 상태 칩과 같은 색).
 사용자는 ${App.company}의 외주 개발 PM이다. 한국어로, 결론 먼저, 짧은 문장과 목록으로 답한다.
 
 일하는 원칙:
