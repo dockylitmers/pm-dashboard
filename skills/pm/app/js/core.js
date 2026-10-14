@@ -143,6 +143,10 @@
       item.guess = !!item.checked?.guess;
       // 아무것도 하지 않은 새 항목(없음, 기록 없음)은 오래된 값이 아니라 할 일이라 빼고 요청 시작일로 챙긴다
       const open = item.status !== "confirmed" && item.status !== "not_needed";
+      // 늦음은 두 가지로만 말한다: 필요일 지남(막는 일정 날짜 기준), 7일 넘게 답 없음(요청한 날 기준)
+      item.needLate = open && !!item.blocksDate && item.blocksDate < today;
+      item.needDays = item.blocksDate ? F.daysBetween(today, item.blocksDate) : null;
+      item.noReply = item.status === "requested" && (item.waitDays ?? 0) > WAIT_LIMIT_DAYS;
       item.stale = open && (item.ageDays == null ? item.status !== "missing" : item.ageDays > STALE_DAYS);
       item.recheck = item.status !== "not_needed" && (item.guess || item.stale);
       return item;
@@ -225,42 +229,64 @@
     return { ...gate, inDays: F.daysBetween(today, gate.date), total: need.length, ready: ready.length, open, after: gates.slice(1, 3) };
   }
 
-  // 이번 주(오늘부터 horizon일) 할 일. 요청 시작일이 지난 것부터
+  // 늦은 이유는 이 다섯 가지로만 쓴다
+  const LATE = { need: "필요일 지남", ask: "요청 시작일 지남", wait: `${WAIT_LIMIT_DAYS}일 넘게 답 없음`, due: "기한 지남", sprint: "마감 지남" };
+  // 필요일 표기: '필요일 10/8 · 6일 지남', '필요 11/2 · D-19'
+  const needText = (item, today) => (item.blocksDate ? `${item.blocksDate < today ? "필요일" : "필요"} ${F.monthDay(item.blocksDate)} · ${dayLabel(F.daysBetween(today, item.blocksDate))}` : "");
+
+  // 이번 주(오늘부터 horizon일) 할 일. 필요일(막는 일정)·기한 하나로 정렬한다
+  // label은 화면 한 줄(날짜는 옆 칸에), text는 터미널·문서용 한 문장
   function thisWeek(project, items, { today = F.kstDate(new Date()), horizon = 7, forecast = null } = {}) {
     const actions = [];
     const limit = F.addDays(today, horizon);
-    for (const item of items.filter((i) => i.status === "missing" && i.askBy && i.askBy <= limit).sort((a, b) => a.askBy.localeCompare(b.askBy))) {
-      actions.push({
-        type: item.ball === "client" ? "request" : "prepare",
-        item: item.id,
-        late: item.askBy < today,
-        date: item.askBy,
-        text: item.ball === "client" ? `‘${item.title}’ 요청 (${item.blocks} ${F.monthDay(item.blocksDate)} 전에 필요)` : `‘${item.title}’ 준비 (${item.blocks} ${F.monthDay(item.blocksDate)} 전)`,
-      });
+    const need = (item) => (item.blocksDate ? { date: item.blocksDate, dateKind: "필요" } : { date: null, dateKind: null });
+    for (const item of items.filter((i) => i.status === "missing" && i.askBy && i.askBy <= limit)) {
+      const why = item.needLate ? LATE.need : item.askBy < today ? LATE.ask : null;
+      const label = item.ball === "client" ? `‘${item.title}’ 요청` : `‘${item.title}’ 준비`;
+      actions.push({ type: item.ball === "client" ? "request" : "prepare", item: item.id, late: !!why, why, ...need(item), label, text: `${label}${item.blocksDate ? ` (${item.blocks} ${F.monthDay(item.blocksDate)} 전에 필요)` : ""}` });
     }
-    for (const item of items.filter((i) => i.status === "requested" && (i.waitDays ?? 0) > WAIT_LIMIT_DAYS).sort((a, b) => b.waitDays - a.waitDays))
-      actions.push({ type: "remind", item: item.id, late: true, date: item.requested, text: `‘${item.title}’ 리마인드 (요청 D+${item.waitDays})` });
-    for (const item of items.filter((i) => i.status === "received" && i.ball === "us"))
-      actions.push({ type: "review", item: item.id, late: false, date: item.updated || today, text: `‘${item.title}’ 받은 내용 검토·확정` });
+    // 리마인드: 7일 넘게 답이 없거나, 필요일이 이미 지난 고객사 대기
+    for (const item of items.filter((i) => i.status === "requested" && (i.noReply || i.needLate))) {
+      const label = `‘${item.title}’ 리마인드 (요청 D+${item.waitDays})`;
+      actions.push({ type: "remind", item: item.id, late: true, why: item.needLate ? LATE.need : LATE.wait, ...need(item), label, text: label });
+    }
+    for (const item of items.filter((i) => i.status === "received" && i.ball === "us")) {
+      const label = `‘${item.title}’ 받은 내용 검토·확정`;
+      actions.push({ type: "review", item: item.id, late: item.needLate, why: item.needLate ? LATE.need : null, ...need(item), label, text: label });
+    }
+    // 결정: 기한이 이번 주 안이거나 지난 것. 날짜가 아닌 옛 기한은 날짜 칸에 글자 그대로
+    for (const d of decisionsOf(project, today).filter((x) => x.dueInfo && (x.dueInfo.invalid || x.dueInfo.date <= limit))) {
+      const label = `‘${d.title}’ 결정`;
+      actions.push({ type: "decision", decision: d.n, late: d.dueInfo.late, why: d.dueInfo.late ? LATE.due : null, date: d.dueInfo.date, dateKind: "기한", raw: d.dueInfo.invalid ? d.dueInfo.raw : null, label, text: `${label} (기한 ${d.dueInfo.text})` });
+    }
+    // 위험: 다시 볼 날(기한)이 이번 주 안이거나 지난 것
+    for (const r of risksOf(project, today).filter((x) => x.dueInfo && !x.dueInfo.invalid && x.dueInfo.date <= limit)) {
+      const label = `‘${r.title}’ 위험 대응 확인`;
+      actions.push({ type: "risk", risk: r.n, late: r.dueInfo.late, why: r.dueInfo.late ? LATE.due : null, date: r.dueInfo.date, dateKind: "기한", label, text: `${label} (기한 ${r.dueInfo.text})` });
+    }
     const recheck = items.filter((i) => i.recheck);
     if (recheck.length) {
       const guess = recheck.filter((i) => i.guess).length;
-      actions.push({
-        type: "recheck",
-        late: false,
-        date: today,
-        text: `다시 확인할 값 ${recheck.length}개 (${[guess && `추정 ${guess}`, recheck.length - guess && `${STALE_DAYS}일 넘게 확인 안 함 ${recheck.length - guess}`].filter(Boolean).join(" · ")})`,
-      });
+      const label = `다시 확인할 값 ${recheck.length}개 (${guess === recheck.length ? "모두 추정" : [guess && `추정 ${guess}`, recheck.length - guess && `${STALE_DAYS}일 넘게 확인 안 함 ${recheck.length - guess}`].filter(Boolean).join(" · ")})`;
+      actions.push({ type: "recheck", late: false, date: null, label, text: label });
     }
     const contract = contractSummary(project, today);
-    if (contract && !contract.reviewDone)
-      actions.push({ type: "contract", late: false, date: today, text: `계약 점검 ${contract.review.unchecked}개 항목 확인` });
+    if (contract && !contract.reviewDone) {
+      const label = `계약 점검 ${contract.review.unchecked}개 항목 확인`;
+      actions.push({ type: "contract", late: false, date: null, label, text: label });
+    }
     const labels = items.find((i) => i.id === "labels");
-    if (project.github?.repo && labels && labels.status !== "confirmed" && labels.status !== "not_needed")
-      actions.push({ type: "setup-repo", item: "labels", late: false, date: today, text: "저장소 라벨·스프린트 마일스톤 만들기 (pm setup-repo)" });
-    if (forecast?.views?.some((v) => v.isLate))
-      actions.push({ type: "sprint", late: true, date: today, text: "마감이 지난 스프린트의 열린 이슈를 다음 스프린트로 옮길지 정리" });
-    return actions;
+    if (project.github?.repo && labels && labels.status !== "confirmed" && labels.status !== "not_needed") {
+      const label = "저장소 라벨·스프린트 마일스톤 만들기 (pm setup-repo)";
+      actions.push({ type: "setup-repo", item: "labels", late: false, date: null, label, text: label });
+    }
+    const lateViews = forecast?.views?.filter((v) => v.isLate) || [];
+    if (lateViews.length) {
+      const label = `${lateViews.map((v) => v.title.split(" ")[0]).join(", ")}의 열린 이슈 ${lateViews.reduce((sum, v) => sum + v.open, 0)}건을 다음 스프린트로 옮길지 정리`;
+      actions.push({ type: "sprint", sprint: lateViews[0].number, late: true, why: LATE.sprint, date: lateViews[0].due, dateKind: "마감", label, text: label });
+    }
+    // 날짜 있는 것을 날짜 순으로(지난 것이 자연히 먼저), 같은 날이면 늦은 것 먼저, 날짜 없는 것은 뒤로
+    return actions.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || Number(b.late) - Number(a.late));
   }
 
   // 고객사 확인 요청 목록. 보낸 항목은 요청한 날짜(차수)별로, 아직 안 보낸 항목은 '이번에 보낼 요청'으로 묶는다
@@ -286,33 +312,37 @@
     };
   }
 
+  // 건강도와 '살펴볼 신호'. 신호는 상태 칩 옆 이유 칩과 리미 말풍선이 같은 목록을 쓴다(누르면 그 화면으로)
   function health(project, forecast, items, today = F.kstDate(new Date())) {
-    const reasons = [];
+    const signals = [];
     let level = 0;
-    if (forecast?.project) {
+    const add = (signal, lv = 0) => {
+      signals.push({ cls: lv >= 2 ? "crit" : "warn", ...signal });
+      level = Math.max(level, lv);
+    };
+    if (forecast?.project && forecast.project.status !== "on") {
       const s = forecast.project.status;
-      if (s === "off") level = 2;
-      else if (s === "risk") level = Math.max(level, 1);
-      reasons.push(`${forecast.project.targetLabel} 예측 ${FORECAST_STATUS[s].label}`);
+      add({ key: "forecast", text: `${forecast.project.targetLabel} 예측 ${FORECAST_STATUS[s].label}`, short: `${forecast.project.targetLabel} 예측 ${FORECAST_STATUS[s].label}`, view: "schedule", anchor: "velocity" }, s === "off" ? 2 : 1);
     }
-    const overdue = items.filter((item) => item.overdue);
-    if (overdue.length >= 3) level = Math.max(level, 1);
-    if (overdue.length) reasons.push(`기한 넘긴 준비 항목 ${overdue.length}건`);
+    const lateDecisions = decisionsOf(project, today).filter((d) => d.dueInfo?.late);
+    if (lateDecisions.length) add({ key: "decisions", text: `기한 지난 결정 ${lateDecisions.length}건`, short: `결정 기한 지남 ${lateDecisions.length}`, view: "overview", anchor: "decisions" }, 1);
+    const noReply = items.filter((item) => item.noReply);
+    if (noReply.length) add({ key: "noReply", text: `${WAIT_LIMIT_DAYS}일 넘게 답 없는 고객사 요청 ${noReply.length}건`, short: `${WAIT_LIMIT_DAYS}일 넘게 답 없음 ${noReply.length}`, view: "overview", anchor: "waiting" }, noReply.length >= 3 ? 1 : 0);
+    const dueLate = items.filter((item) => !item.noReply && item.due && item.due < today && item.status !== "confirmed" && item.status !== "not_needed");
+    if (dueLate.length) add({ key: "dueLate", text: `기한 지난 준비 항목 ${dueLate.length}건`, short: `준비 기한 지남 ${dueLate.length}`, view: "kickoff" }, dueLate.length >= 3 ? 1 : 0);
     const late = items.filter((item) => item.late);
-    if (late.length) {
-      level = Math.max(level, 1);
-      reasons.push(`요청 시작일이 지났는데 아직 요청하지 않은 항목 ${late.length}건`);
-    }
+    if (late.length) add({ key: "late", text: `요청 시작일이 지났는데 아직 요청하지 않은 항목 ${late.length}건`, short: `요청 늦음 ${late.length}`, view: "kickoff", filter: "missing" }, 1);
     const ready = readiness(items);
     const devStart = project.dates?.devStart;
     const toDevStart = devStart ? F.daysBetween(today, devStart) : null;
-    if (toDevStart != null && toDevStart > 0 && toDevStart <= 21 && ready.percent < 60) {
-      level = Math.max(level, 1);
-      reasons.push(`개발 착수 ${toDevStart}일 전인데 준비율 ${ready.percent}%`);
-    }
+    if (toDevStart != null && toDevStart > 0 && toDevStart <= 21 && ready.percent < 60)
+      add({ key: "readiness", text: `개발 착수 ${toDevStart}일 전인데 준비율 ${ready.percent}%`, short: `준비율 ${ready.percent}%`, view: "kickoff" }, 1);
+    const lateRisks = risksOf(project, today).filter((r) => r.dueInfo?.late);
+    if (lateRisks.length) add({ key: "risks", text: `대응 기한 지난 위험 ${lateRisks.length}건`, short: `위험 기한 지남 ${lateRisks.length}`, view: "overview", anchor: "risks" });
     const contract = contractSummary(project, today);
-    if (contract?.review.missing || contract?.review.risk) reasons.push(`계약 점검: 없음 ${contract.review.missing} · 불리·모호 ${contract.review.risk}`);
-    return { ...HEALTH[level], level, reasons };
+    if (contract?.review.missing || contract?.review.risk)
+      add({ key: "contract", text: `계약 점검: 없음 ${contract.review.missing} · 불리·모호 ${contract.review.risk}`, short: `계약 점검 ${contract.review.missing + contract.review.risk}`, view: "kickoff", anchor: "contract" });
+    return { ...HEALTH[level], level, signals, reasons: signals.map((x) => x.text) };
   }
 
   function model(project, { forecast = null, overrides = {}, queue = [], today = F.kstDate(new Date()) } = {}) {
@@ -409,62 +439,113 @@
     String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
   const num = (n) => (n == null || Number.isNaN(n) ? "-" : Math.round(n).toLocaleString("ko-KR"));
 
-  // 오늘의 브리핑: 결론 먼저, 최대 4줄. html은 화면용(<strong> 강조), text는 터미널용
+  // 고객사 답 기다림 한 줄의 날짜: 필요일이 지났으면 '필요일 10/8 · 6일 지남'
+  const waitNeed = (item, today) => (item.blocksDate ? `${escHtml(item.blocks || "")} ${needText(item, today)}` : "");
+
+  // 오늘의 브리핑(터미널·리미용): 결론 먼저, 기한 지난 결정이 1순위. html은 <strong> 강조, text는 글자만
   function briefing(m) {
-    const { project, forecast, waiting, missing, readiness: ready, kickoff: ko, thisWeek: week } = m;
+    const { project, forecast, waiting, missing, readiness: ready, kickoff: ko, thisWeek: week, today } = m;
     const items = [];
     const add = (html, extra) => items.push({ html, text: html.replace(/<[^>]+>/g, ""), ...extra });
     const p = forecast?.project;
+    const lateDecisions = (m.decisions || []).filter((d) => d.dueInfo?.late);
+    if (lateDecisions.length)
+      add(
+        `기한 지난 결정 <strong>${lateDecisions.length}건</strong>: ${lateDecisions
+          .slice(0, 2)
+          .map((d) => `‘${escHtml(d.title)}’(${escHtml(d.dueInfo.label)})`)
+          .join(" · ")}${lateDecisions.length > 2 ? ` 외 ${lateDecisions.length - 2}건` : ""}`,
+        { view: "overview", anchor: "decisions", kind: "decision" },
+      );
     if (ko?.active && ko.current) {
       const late = week.filter((a) => a.late).length;
       add(
         `킥오프 <strong>${ko.completed}/${ko.stages.length}단계</strong>, 지금은 ‘${escHtml(ko.current.name)}’(${ko.current.done}/${ko.current.total}). 이번 주 할 일 <strong>${week.length}개</strong>${late ? `, 그중 <strong>${late}개는 늦었어요</strong>` : ""}.`,
-        { view: "kickoff" },
+        { view: "kickoff", kind: "kickoff" },
+      );
+    }
+    const urgent = waiting.filter((i) => i.needLate || i.noReply);
+    if (urgent.length) {
+      const top = urgent[0];
+      add(
+        `고객사 답 기다림 ${waiting.length}건 중 <strong>${urgent.length}건 리마인드</strong> — 가장 급한 것 ‘${escHtml(top.title)}’${top.blocksDate ? ` (${waitNeed(top, today)})` : ` (요청 D+${top.waitDays})`}.`,
+        { view: "requests", kind: "remind" },
       );
     }
     if (p) {
       const label = `${p.targetLabel}(${F.monthDay(p.target)})`;
-      if (p.status === "on") add(`${label}은 <strong>순항</strong>입니다. 지금 속도면 ${F.shortDate(p.netFinish)}에 남은 이슈가 끝납니다.`, { view: "schedule" });
+      if (p.status === "on") add(`${label}은 <strong>순항</strong>입니다. 지금 속도면 ${F.shortDate(p.netFinish)}에 남은 이슈가 끝납니다.`, { view: "schedule", kind: "forecast" });
       else
         add(
-          `${label} <strong>${FORECAST_STATUS[p.status].label}</strong>: 지금 속도면 마감에 <strong>약 ${num(p.remainingAtTarget)}건이 남습니다</strong>. 맞추려면 주 ${num(p.requiredVelocity)}건을 닫아야 합니다(지금 ${num(p.velocity)}건).`,
-          { view: "schedule" },
+          `${label} <strong>${FORECAST_STATUS[p.status].label}</strong>: 지금 추세면 마감에 <strong>약 ${num(p.remainingAtTarget)}건이 남습니다</strong>${p.netFinish ? `(끝나는 날 ${F.monthDay(p.netFinish)})` : ""}. 맞추려면 주 ${num(p.requiredVelocity)}건을 닫아야 합니다(지금 ${num(p.velocity)}건).`,
+          { view: "schedule", kind: "forecast" },
         );
     } else if (!ko?.active) {
-      add(`킥오프 준비율 <strong>${ready.percent}%</strong> (${ready.ready}/${ready.total}). 일정 예측은 이슈 트래커를 연결하면 시작됩니다.`, { view: "kickoff" });
+      add(`킥오프 준비율 <strong>${ready.percent}%</strong> (${ready.ready}/${ready.total}). 일정 예측은 이슈 트래커를 연결하면 시작됩니다.`, { view: "kickoff", kind: "kickoff" });
     }
-    if (waiting.length) {
-      const top = waiting[0];
-      const late = waiting.filter((i) => i.overdue).length;
-      add(
-        `고객사 답 기다림 <strong>${waiting.length}건</strong>${late ? `(기한 지남 ${late}건)` : ""}, 가장 급한 것은 ‘${escHtml(top.title)}’${top.blocks ? ` — ${escHtml(top.blocks)} ${F.monthDay(top.blocksDate)} 전에 필요` : ""}.`,
-        { view: "requests" },
-      );
-    }
-    const first = week.find((a) => a.type === "request") || (missing[0] && { item: missing[0].id, text: `‘${missing[0].title}’` });
-    if (missing.length && first) add(`아직 없는 자료 <strong>${missing.length}건</strong> — 먼저 ${escHtml(first.text)}.`, { view: "kickoff", filter: "missing", item: first.item });
+    const first = week.find((a) => a.type === "request") || (missing[0] && { item: missing[0].id, label: `‘${missing[0].title}’` });
+    if (missing.length && first) add(`아직 없는 자료 <strong>${missing.length}건</strong> — 먼저 ${escHtml(first.label)}.`, { view: "kickoff", filter: "missing", item: first.item, kind: "missing" });
     const late = forecast?.views.filter((view) => view.isLate) ?? [];
     if (late.length)
       add(
         `${late.map((view) => escHtml(view.title.split(" ")[0])).join(", ")} 마감이 지났는데 <strong>${late.reduce((sum, view) => sum + view.open, 0)}건</strong>이 열려 있습니다. 다음 스프린트로 옮길지 정리가 필요해요.`,
-        { view: "schedule" },
+        { view: "schedule", kind: "sprint" },
       );
     if (m.recheck?.length) {
       const guess = m.recheck.filter((i) => i.guess).length;
       add(
-        `다시 확인할 값 <strong>${m.recheck.length}개</strong>${guess ? ` — 그중 <strong>${guess}개는 추정</strong>이라 담당자 확인이 필요해요` : ` — ${STALE_DAYS}일 넘게 원본에서 확인하지 않았어요`}.`,
-        { view: "kickoff", filter: "recheck" },
+        `다시 확인할 값 <strong>${m.recheck.length}개</strong> — ${guess === m.recheck.length ? "모두 추정이에요. 직접 확인해 주세요" : guess ? `${guess}개는 추정이에요. 직접 확인해 주세요` : `${STALE_DAYS}일 넘게 원본에서 확인하지 않았어요`}.`,
+        { view: "kickoff", filter: "recheck", kind: "recheck" },
       );
     }
-    if (project.decisions?.length)
+    const soon = (m.decisions || []).filter((d) => !d.dueInfo?.late);
+    if (soon.length && !lateDecisions.length)
+      add(`결정할 일 <strong>${soon.length}건</strong>: ${soon.slice(0, 2).map((d) => `‘${escHtml(d.title)}’${d.dueInfo ? `(${escHtml(d.dueInfo.label)})` : ""}`).join(" · ")}`, { view: "overview", anchor: "decisions", kind: "decision" });
+    return items.slice(0, 5);
+  }
+
+  // 오늘 먼저 할 것(홈 상태 카드): 지금 바로 할 행동 1~3개와 버튼. 순서: 기한 지난 결정 → 필요일 지난·답 없는 리마인드 → 요청 늦은 자료 → 지난 스프린트 → 위험 → 받은 자료 검토 → 다시 확인
+  function todayFirst(m, limit = 3) {
+    const { waiting, thisWeek: week, today } = m;
+    const out = [];
+    const add = (html, action, extra = {}) => out.push({ html, text: html.replace(/<[^>]+>/g, ""), action, ...extra });
+    const lateDecisions = (m.decisions || []).filter((d) => d.dueInfo?.late).sort((a, b) => a.dueInfo.date.localeCompare(b.dueInfo.date));
+    if (lateDecisions.length)
       add(
-        `오늘 결정할 일 <strong>${project.decisions.length}건</strong>: ${project.decisions
-          .slice(0, 2)
-          .map((d) => escHtml(d.title))
-          .join(" · ")}`,
-        { view: "overview", anchor: "decisions" },
+        `기한 지난 결정 <strong>${lateDecisions.length}건</strong> — ‘${escHtml(lateDecisions[0].title)}’ <span class="late-t">${escHtml(lateDecisions[0].dueInfo.label)}</span>${lateDecisions.length > 1 ? ` 외 ${lateDecisions.length - 1}건` : ""}`,
+        { kind: "go", view: "overview", anchor: "decisions", label: "결정 보기" },
+        { kind: "decision" },
       );
-    return items.slice(0, 4);
+    const remind = waiting.filter((i) => i.needLate || i.noReply);
+    if (remind.length) {
+      const top = remind[0];
+      add(
+        `고객사 답 <strong>${remind.length}건</strong> 리마인드 — ‘${escHtml(top.title)}’ ${top.needLate ? `<span class="late-t">${escHtml(needText(top, today))}</span>` : `요청 <span class="late-t">D+${top.waitDays}</span>`}`,
+        { kind: "remind", items: remind.map((i) => i.id), label: `리마인드 초안 ${remind.length}건` },
+        { kind: "remind" },
+      );
+    }
+    const missingLate = week.filter((a) => (a.type === "request" || a.type === "prepare") && a.late);
+    if (missingLate.length)
+      add(
+        `요청·준비가 늦은 자료 <strong>${missingLate.length}건</strong> — 먼저 ${escHtml(missingLate[0].label)}${missingLate[0].date ? ` (${escHtml(`${missingLate[0].dateKind} ${F.monthDay(missingLate[0].date)}`)})` : ""}`,
+        { kind: "item", item: missingLate[0].item, label: missingLate[0].type === "request" ? "요청서 만들기" : "열기" },
+        { kind: "missing" },
+      );
+    const sprint = week.find((a) => a.type === "sprint");
+    if (sprint) add(escHtml(sprint.label), { kind: "sprint", sprint: sprint.sprint, label: "스프린트 보기" }, { kind: "sprint" });
+    const risks = week.filter((a) => a.type === "risk" && a.late);
+    if (risks.length) add(`대응 기한 지난 위험 <strong>${risks.length}건</strong> — ${escHtml(risks[0].label)}`, { kind: "go", view: "overview", anchor: "risks", label: "위험 보기" }, { kind: "risk" });
+    const review = week.filter((a) => a.type === "review");
+    if (review.length) {
+      const late = review.filter((a) => a.late).length;
+      add(`받은 자료 검토·확정 <strong>${review.length}건</strong>${late ? ` — 그중 ${late}건은 <span class="late-t">필요일 지남</span>` : ""}`, { kind: "go", view: "kickoff", filter: "received", label: "검토 목록" }, { kind: "review" });
+    }
+    if (m.recheck?.length) {
+      const guess = m.recheck.filter((i) => i.guess).length;
+      add(`다시 확인할 값 <strong>${m.recheck.length}개</strong> — ${guess === m.recheck.length ? "모두 추정이에요" : guess ? `${guess}개는 추정이에요` : `${STALE_DAYS}일 넘게 확인 안 했어요`}`, { kind: "go", view: "kickoff", filter: "recheck", label: "다시 확인" }, { kind: "recheck" });
+    }
+    return out.slice(0, limit);
   }
 
   // 고객사 요청서. 고객사에 그대로 나가는 글이라 결론만 쓰고 이슈 번호·내부 메모는 넣지 않는다
@@ -588,6 +669,9 @@
     health,
     model,
     briefing,
+    todayFirst,
+    needText,
+    LATE,
     requestText,
     reminderText,
     normalize,

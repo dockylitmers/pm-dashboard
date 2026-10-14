@@ -317,8 +317,10 @@ function statusSummary(m) {
 
 function printWeek(m) {
   if (!m.thisWeek.length) return console.log("이번 주 할 일  없음");
-  console.log("이번 주 할 일");
-  for (const a of m.thisWeek.slice(0, 10)) console.log(`  ${a.late ? "! " : "- "}${a.text}`);
+  console.log("이번 주 할 일 (필요일·기한 순)");
+  const when = (a) => (a.date ? ` — ${a.date < m.today && a.dateKind === "필요" ? "필요일" : a.dateKind} ${F.monthDay(a.date)} · ${Core.dayLabel(F.daysBetween(m.today, a.date))}` : a.raw ? ` — 기한 ${a.raw}` : "");
+  for (const a of m.thisWeek.slice(0, 12)) console.log(`  ${a.late ? "! " : "- "}${a.label || a.text}${when(a)}${a.why ? ` [${a.why}]` : ""}`);
+  if (m.thisWeek.length > 12) console.log(`  외 ${m.thisWeek.length - 12}개`);
 }
 
 commands.status = (args) => {
@@ -335,8 +337,8 @@ commands.status = (args) => {
   if (s.forecast) {
     const f = s.forecast;
     console.log(`예측    남은 ${f.remaining} · 처리 ${fmt(f.velocityPerWeek)}/주 · 유입 ${fmt(f.inflowPerWeek)}/주 · 새 이슈가 멈추면 ${F.shortDate(f.expected)} (${F.monthDay(f.optimistic)}~${F.monthDay(f.pessimistic)})`);
-    console.log(`        지금 추세면 ${F.monthDay(f.target)}에 ~${f.remainingAtTarget}건 남음 · 맞추려면 주 ${f.requiredVelocityPerWeek}건 · GitHub ${syncAge(f.snapshot)} 스냅샷`);
-  } else console.log(`예측    ${m.project.github ? "GitHub 스냅샷 없음 (pm sync)" : "GitHub 저장소 연결 전"}`);
+    console.log(`        지금 추세면 ${F.monthDay(f.target)}에 ~${f.remainingAtTarget}건 남음 · 맞추려면 주 ${f.requiredVelocityPerWeek}건 · GitHub ${syncAge(f.snapshot)} 기준`);
+  } else console.log(`예측    ${m.project.github ? "GitHub 이슈를 아직 받지 않음 (pm update)" : "GitHub 저장소 연결 전"}`);
   console.log(`준비    ${s.readiness.ready}/${s.readiness.total} 확정 (${s.readiness.percent}%) · 요청 목록 ${s.requestSheet.sent}/${s.requestSheet.total} 보냄, 답 ${s.requestSheet.answered} · 고객사 대기 ${s.waitingOnClient.length}${s.waitingOnClient[0] ? ` (최장 D+${s.waitingOnClient[0].waitDays} ${s.waitingOnClient[0].title})` : ""}`);
   if (s.contract) console.log(`계약    점검 있음 ${s.contract.review.ok}/${s.contract.review.total} · 불리·모호 ${s.contract.review.risk} · 없음 ${s.contract.review.missing} · 확인 전 ${s.contract.review.unchecked}${s.contract.nextPayment ? ` · 다음 대금 ${s.contract.nextPayment.name}(${s.contract.nextPayment.trigger})` : ""}`);
   if (s.approvalQueue.length) console.log(`승인 대기열 ${s.approvalQueue.length}건`);

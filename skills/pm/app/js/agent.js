@@ -261,7 +261,7 @@
       lines.push(
         item.waitDays > 7
           ? `\n일주일이 넘었어요. 막히는 기능과 기한을 적어 리마인드하는 걸 권해요.`
-          : `\n아직 기다릴 만해요. ${item.due ? `${App.esc(item.due)} 기한 전까지` : "D+7이 되면"} 리마인드할게요.`,
+          : `\n아직 기다릴 만해요. ${item.due ? `${window.PMForecast.monthDay(item.due)} 기한 전까지` : "D+7이 되면"} 리마인드할게요.`,
       );
       actions.push({
         label: "리마인드 초안",
@@ -395,55 +395,29 @@
     const w = model.waiting;
     if (!w.length)
       return addMessage("bot", "고객사 답을 기다리는 항목이 없어요. 👍");
+    const today = window.PMForecast.kstDate(new Date());
     const lines = [
-      `고객사 답을 기다리는 항목 <b>${w.length}건</b>이에요 (오래된 순).`,
+      `고객사 답을 기다리는 항목 <b>${w.length}건</b>이에요 (필요일이 빠른 순).`,
     ];
     for (const item of w.slice(0, 6))
       lines.push(
-        `• <b>D+${item.waitDays}</b> ${esc(item.title)}${item.blocks ? ` → ${esc(item.blocks)} 막힘` : ""}`,
+        `• <b>D+${item.waitDays}</b> ${esc(item.title)}${item.blocks ? ` → ${esc(item.blocks)} ${item.needLate ? `<b>${esc(window.PMCore.needText(item, today))}</b>` : esc(window.PMCore.needText(item, today))}` : ""}`,
       );
-    const overdue = w.filter((item) => item.overdue);
-    if (overdue.length)
+    // 리마인드할 것: 필요일이 지났거나 7일 넘게 답이 없는 것
+    const remind = w.filter((item) => item.needLate || item.noReply);
+    if (remind.length)
       lines.push(
-        `\n일주일 넘은 ${overdue.length}건은 막히는 기능과 기한을 적어 한 번에 리마인드하는 걸 권해요. 회신이 없을 때의 대안((제안) 값)도 같이 적을게요.`,
+        `\n필요일이 지났거나 ${window.PMCore.WAIT_LIMIT_DAYS}일 넘게 답이 없는 ${remind.length}건은 막히는 기능과 기한을 적어 한 번에 리마인드하는 걸 권해요. 회신이 없을 때의 대안((제안) 값)도 같이 적을게요.`,
       );
     addMessage(
       "bot",
       lines.join("\n"),
       [
-        overdue.length && {
-          label: `리마인드 ${overdue.length}건 초안`,
+        remind.length && {
+          label: `리마인드 ${remind.length}건 초안`,
           icon: "send",
           primary: true,
-          run: () => {
-            for (const item of overdue)
-              App.addToQueue({
-                kind: "reminder",
-                itemId: item.id,
-                title: `${item.title} 리마인드`,
-                to: `${model.project.client} 담당자`,
-                channel:
-                  App.RECEIVE[
-                    item.receiveAt || model.project.receiveDefault || "notion"
-                  ].label,
-                receive:
-                  item.receiveAt || model.project.receiveDefault || "notion",
-                text: App.reminderText(model, item),
-                by: "limi",
-              });
-            addMessage(
-              "bot",
-              `리마인드 초안 ${overdue.length}건을 승인 대기열에 넣었어요.`,
-              [
-                {
-                  label: "승인 대기열 열기",
-                  icon: "send",
-                  primary: true,
-                  run: () => App.openQueue(),
-                },
-              ],
-            );
-          },
+          run: () => App.queueReminders(remind.map((item) => item.id)),
         },
         {
           label: "대기 목록 보기",

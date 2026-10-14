@@ -72,6 +72,7 @@
   const fmt = (n) =>
     n == null || Number.isNaN(n) ? "-" : Math.round(n).toLocaleString("ko-KR");
   const realToday = () => F.kstDate(new Date());
+  const isDateStr = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "");
 
   const ICONS = {
     home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
@@ -497,9 +498,16 @@
         .join("")}${todayLine.replace("<b>오늘</b>", "")}</div></div>`;
       const p = forecast.project;
       if (p) {
-        sprintRow += `<div class="tl-row" data-internal><div class="tl-name">완료 예측</div><div class="tl-track"><div class="tl-forecast" style="left:${pct(p.optimistic)};width:${width(p.optimistic, p.pessimistic)}" title="${esc(`새 이슈가 멈출 때 ${F.shortDate(p.optimistic)}~${F.shortDate(p.pessimistic)}`)}"><i style="left:${((F.daysBetween(p.optimistic, p.expected) + 0.5) / (F.daysBetween(p.optimistic, p.pessimistic) + 1)) * 100}%"></i></div>
-          <div class="tl-milestone" style="left:${pct(p.target)};background:var(--crit)" title="${esc(`${p.targetLabel} ${F.shortDate(p.target)}`)}"></div>
-          <span class="tl-mlabel" style="left:calc(${pct(p.target)} + 12px);font-weight:500;color:var(--ink-2)">${esc(p.targetLabel)} · 추세면 ~${fmt(p.remainingAtTarget)}건 남음</span>${todayLine.replace("<b>오늘</b>", "")}</div></div>`;
+        // 주 표식은 지금 추세(유입 포함)로 끝나는 날, 보조 표식은 새 이슈가 멈출 때(가장 빠른 경우)
+        const late = !p.netFinish || p.netFinish > p.target;
+        const nearEnd = (date) => F.daysBetween(start, date) / span > 0.78;
+        const band = p.optimistic !== p.pessimistic ? `<div class="tl-forecast" style="left:${pct(p.optimistic)};width:${width(p.optimistic, p.pessimistic)}"></div>` : "";
+        const quick = `<span class="tl-quick" style="left:${pct(p.expected)}" title="${esc(`새 이슈가 멈추면 ${F.shortDate(p.expected)} (낙관 ${F.monthDay(p.optimistic)}~비관 ${F.monthDay(p.pessimistic)})`)}"></span>`;
+        const target = `<div class="tl-milestone" style="left:${pct(p.target)}" title="${esc(`${p.targetLabel} ${F.shortDate(p.target)}`)}"></div><span class="tl-mlabel" style="left:calc(${pct(p.target)} + 12px);font-weight:500;color:var(--ink-2)">${esc(p.targetLabel)} ${F.monthDay(p.target)}${p.remainingAtTarget ? ` · 추세면 ~${fmt(p.remainingAtTarget)}건 남음` : ""}</span>`;
+        const finish = p.netFinish
+          ? `<span class="tl-finish ${late ? "late" : "good"}" style="left:${pct(p.netFinish)}" title="${esc(`지금 추세면 ${F.shortDate(p.netFinish)}에 끝남`)}"></span><span class="tl-mlabel below ${late ? "late" : ""}" style="${nearEnd(p.netFinish) ? `right:calc(100% - ${pct(p.netFinish)} - 7px)` : `left:calc(${pct(p.netFinish)} - 7px)`}">지금 추세면 ${F.monthDay(p.netFinish)} 끝${p.netFinish > end ? " →" : ""}</span>`
+          : `<span class="tl-mlabel below late" style="right:4px">지금 추세로는 끝나지 않음</span>`;
+        sprintRow += `<div class="tl-row fc" data-internal><div class="tl-name">완료 예측</div><div class="tl-track">${band}${quick}${target}${finish}${todayLine.replace("<b>오늘</b>", "")}</div></div>`;
       }
     }
     const kinds = new Set(project.phases.map((phase) => phase.kind));
@@ -516,7 +524,7 @@
       )
       .join("");
     return `<div class="timeline-scroll"><div class="timeline"><div class="tl-row" style="min-height:22px"><div></div><div class="tl-scale" style="display:block">${months}</div></div>${phaseRow}${sprintRow}</div></div>
-      <div class="tl-legend">${legend}<span><i class="key" style="background:var(--ink);width:9px;height:9px;transform:rotate(45deg);border-radius:2px"></i>주요 일정</span>${forecast ? '<span data-internal><i class="key dot" style="background:var(--s2)"></i>예상 완료일(새 이슈가 멈출 때, 막대는 낙관~비관)</span>' : ""}<span><i class="key line" style="background:var(--crit);width:2px;height:12px"></i>오늘</span></div>`;
+      <div class="tl-legend">${legend}<span><i class="key" style="background:var(--ink);width:9px;height:9px;transform:rotate(45deg);border-radius:2px"></i>주요 일정</span>${forecast?.project ? `<span data-internal><i class="key dot" style="background:var(--crit)"></i>지금 추세면 끝나는 날</span><span data-internal><i class="key dot hollow"></i>새 이슈가 멈추면(가장 빠른 경우${forecast.project.optimistic !== forecast.project.pessimistic ? ", 막대는 낙관~비관" : ""})</span>` : ""}<span><i class="key line" style="background:var(--ink-2);width:2px;height:12px"></i>오늘</span></div>`;
   }
 
   // ---------------------------------------------------------------- 화면: 오늘
@@ -530,7 +538,7 @@
     if (ghAt || fail("github"))
       parts.push(`<span class="${fail("github") ? "bad" : ""}">${fail("github") ? icon("alert") : ""}GitHub ${ghAt ? esc(whenLabel(ghAt)) : "받은 적 없음"}${fail("github") ? " (이번에 못 받음)" : ""}</span>`);
     if (st.sources.client || fail("deep"))
-      parts.push(`<span class="${fail("deep") ? "bad" : ""}">${fail("deep") ? icon("alert") : ""}고객사 답 ${st.sources.client ? esc(whenLabel(st.sources.client)) : "읽은 적 없음"}${fail("deep") ? ` (이번에 못 읽음${fail("deep").retry ? ` · ${esc(fail("deep").retry)} 이후 다시` : ""})` : ""}</span>`);
+      parts.push(`<span class="${fail("deep") ? "bad" : ""}" ${fail("deep") ? `title="${esc(fail("deep").text)}"` : ""}>${fail("deep") ? icon("alert") : ""}고객사 답 ${st.sources.client ? esc(whenLabel(st.sources.client)) : "읽은 적 없음"}${fail("deep") ? " (이번에 못 읽음)" : ""}</span>`);
     if (st.state === "stale") parts.push(`<span class="old">${icon("alert")}업데이트 ${esc(agoLabel(st.ageHours))}</span>`);
     const guess = model.recheck.filter((i) => i.guess).length;
     if (model.recheck.length) parts.push(`<span>${guess === model.recheck.length ? `추정 ${guess}` : `다시 확인 ${model.recheck.length}${guess ? `(추정 ${guess})` : ""}`}</span>`);
@@ -538,15 +546,42 @@
     return `<button class="fresh-line" data-update-open title="원본별 기준 시각 · 누르면 업데이트 창"><b>기준</b>${parts.join("")}<span class="go">자세히</span></button>`;
   }
   const netWeek = (p) => Math.round(p.velocity) - Math.round(p.inflow);
+  // 하루 처리량은 정수로(1건 미만이면 그렇게)
+  const paceText = (pace) => (pace >= 1 ? `${Math.round(pace)}건` : "1건 미만");
+  const ddLabel = (date) => Core.dayLabel(F.daysBetween(realToday(), date));
+  // 늦음 표시: 색만으로 알리지 않고 아이콘과 글자를 같이 쓴다
+  const lateText = (text) => `<span class="late-t">${icon("alert")}${esc(text)}</span>`;
+  // 확인일·출처 한 줄(결정·위험·고객사 답 기다림): '확인 10/13 · Notion 요청 DB', 추정이면 칩
+  // 출처는 첫 구절만(괄호·쉼표·' · ' 앞, 28자까지) 보이고 전체는 툴팁으로
+  const shortSrc = (src) => {
+    const head = String(src || "").split(/\s[·(]|[(,]/)[0].trim();
+    return head.length > 28 ? `${head.slice(0, 27)}…` : head;
+  };
+  const checkedHtml = (row) =>
+    `<span class="checked-t" ${row.checkedSrc ? `title="${esc(`확인한 곳: ${row.checkedSrc}`)}"` : ""}>${row.guess ? `<span class="chip warn fresh-tag" title="원본에서 직접 확인하지 못하고 추정한 값">추정</span>` : ""}${row.checkedAt ? `${row.guess ? "" : "확인 "}${F.monthDay(row.checkedAt)}${row.checkedSrc ? ` · ${esc(shortSrc(row.checkedSrc))}` : ""}` : "확인 기록 없음"}</span>`;
+  // 기한 한 칸: '기한 10/12 · 2일 지남'(지난 것은 빨강·아이콘), 날짜가 아닌 옛 값은 글자 그대로
+  const dueHtml = (info, word = "기한") =>
+    !info ? `<span class="muted">${word} 없음</span>` : info.invalid ? `<span title="날짜가 아닌 옛 기한 — pm validate 참고">${word} ${esc(info.raw)}</span>` : info.late ? lateText(`${word} ${info.text}`) : `<span class="${info.soon ? "soon-t" : ""}">${word} ${esc(info.text)}</span>`;
+
+  // 오늘 먼저 할 것의 버튼
+  function actionButton(action, primary) {
+    const attrs =
+      action.kind === "remind"
+        ? `data-remind="${esc(action.items.join(","))}"`
+        : action.kind === "item"
+          ? `data-item="${esc(action.item)}"`
+          : action.kind === "sprint"
+            ? `data-sprint="${esc(action.sprint)}"`
+            : `data-go="${esc(action.view)}"${action.anchor ? ` data-anchor="${esc(action.anchor)}"` : ""}${action.filter ? ` data-filter="${esc(action.filter)}"` : ""}`;
+    return `<button class="btn small${primary ? " primary" : ""}" ${attrs}>${esc(action.label)} →</button>`;
+  }
+
   function renderOverview(model) {
     const { project, forecast, waiting, health, phase, gate } = model;
     const p = forecast?.project;
-    const items = briefing(model);
     const today = realToday();
-    const dd = (date) => {
-      const n = F.daysBetween(today, date);
-      return n === 0 ? "오늘" : n > 0 ? `D-${n}` : `D+${-n}`;
-    };
+    const dd = (date) => ddLabel(date);
+    const st = updateStateOf();
 
     // 지금 단계 한 줄: '개발 29/46일째 · SP-05 진행 중'
     const sprintNow = forecast?.current;
@@ -558,30 +593,41 @@
           : "모든 단계 끝"
       : "";
 
-    // 개발 마감 예측: 결론 한 문장 + 이유 세 줄
+    // 개발 마감 예측: 결론 한 문장 + 추세로 끝나는 날 + 이유 세 줄. 숫자는 화면에 보이는 반올림 값끼리 계산한다
     let verdict;
     if (p) {
-      // 보이는 숫자끼리 맞도록 반올림한 값으로 뺀다(126 − 123 = 3)
-      const net = Math.round(p.velocity) - Math.round(p.inflow);
-      const st = FORECAST_STATUS[p.status];
-      const gap = p.requiredVelocity ? p.requiredVelocity - p.velocity : 0;
+      const velocity = Math.round(p.velocity);
+      const inflow = Math.round(p.inflow);
+      const need = p.requiredVelocity ? Math.round(p.requiredVelocity) : null;
+      const net = velocity - inflow;
+      const gap = need != null ? need - velocity : 0;
+      const stf = FORECAST_STATUS[p.status];
       const head =
         p.status === "on"
           ? `마감 전에 끝나요 · ${F.monthDay(p.netFinish)} 예상`
           : p.remainingAtTarget > 0
             ? `마감에 약 ${fmt(p.remainingAtTarget)}건이 남아요`
             : `빠듯해요 · 새 이슈가 줄어야 맞춰요`;
+      const qa = project.dates?.qaStart;
+      const lateBy = p.netFinish ? F.daysBetween(p.target, p.netFinish) : null;
+      const trendLate = !p.netFinish || lateBy > 0;
+      const trend = p.netFinish
+        ? lateBy > 0
+          ? `지금 추세면 ${F.shortDate(p.netFinish)}에 끝나요 — ${p.targetLabel}보다 ${lateBy}일 늦음${isDateStr(qa) && p.netFinish >= qa ? ` · 고객사 QA(${F.monthDay(qa)}) 전에 못 끝나요` : ""}`
+          : `지금 추세면 ${F.shortDate(p.netFinish)}에 끝나요 — ${p.targetLabel} ${-lateBy}일 전`
+        : "지금 추세로는 끝나지 않아요 — 새 이슈가 닫는 것보다 많이 생겨요";
       const max = Math.max(p.remaining, p.remainingAtTarget, 1);
       verdict = `<div class="hero-label">${esc(p.targetLabel)} 예측 · ${F.monthDay(p.target)} (${dd(p.target)})</div>
-        <div class="verdict">${chip(st)}<b>${esc(head)}</b></div>
+        <div class="verdict"><span class="v-icon ${stf.cls}" role="img" aria-label="${esc(`예측 ${stf.label}`)}">${icon(stf.icon)}</span><b>${esc(head)}</b></div>
+        <p class="trend ${trendLate ? "late" : ""}">${icon(trendLate ? "alert" : "calendar")}<span>${esc(trend)}</span></p>
         <div class="vbars" aria-hidden="true">
           <div><span>오늘 남은 이슈</span><i style="width:${(p.remaining / max) * 100}%"></i><b class="num">${fmt(p.remaining)}</b></div>
-          <div><span>마감 때 남을 이슈</span><i class="${p.remainingAtTarget ? "warn" : "good"}" style="width:${Math.max(2, (p.remainingAtTarget / max) * 100)}%"></i><b class="num">${p.remainingAtTarget ? `~${fmt(p.remainingAtTarget)}` : "0"}</b></div>
+          <div><span>마감 때 남을 이슈</span><i class="${p.remainingAtTarget ? stf.cls : "good"}" style="width:${Math.max(2, (p.remainingAtTarget / max) * 100)}%"></i><b class="num">${p.remainingAtTarget ? `~${fmt(p.remainingAtTarget)}` : "0"}</b></div>
         </div>
         <ul class="why">
-          <li>매주 ${fmt(p.velocity)}건을 닫고 ${fmt(p.inflow)}건이 새로 생겨, ${net > 0 ? `실제로는 주 ${fmt(net)}건씩 줄어요` : net < 0 ? `오히려 주 ${fmt(-net)}건씩 늘어요` : "남은 이슈가 줄지 않아요"}</li>
-          ${p.status !== "on" && p.requiredVelocity ? `<li>맞추려면 주 ${fmt(p.requiredVelocity)}건(지금보다 ${fmt(gap)}건 더)을 닫거나 범위를 줄여야 해요</li>` : ""}
-          <li>새 이슈가 더 생기지 않으면 ${F.monthDay(p.expected)}에 끝나요</li>
+          <li>매주 ${fmt(velocity)}건을 닫고 ${fmt(inflow)}건이 새로 생겨, ${net > 0 ? `실제로는 주 ${fmt(net)}건씩 줄어요` : net < 0 ? `오히려 주 ${fmt(-net)}건씩 늘어요` : "남은 이슈가 줄지 않아요"}</li>
+          ${p.status !== "on" && need != null ? `<li>맞추려면 주 ${fmt(need)}건(지금보다 ${fmt(gap)}건 더)을 닫거나 범위를 줄여야 해요</li>` : ""}
+          <li>새 이슈가 더 생기지 않으면 ${F.monthDay(p.expected)}에 끝나요(가장 빠른 경우)</li>
         </ul>
         <button class="link-btn" data-go="schedule" data-anchor="velocity">일정·속도에서 자세히 →</button>`;
     } else if (gate) {
@@ -591,33 +637,55 @@
         <div style="margin-top:12px"><button class="link-btn" data-go="kickoff">체크리스트 보기 →</button></div>`;
     } else verdict = `<div class="hero-label">일정 예측</div><div class="hero-note">일정과 이슈 트래커를 연결하면 마감 예측이 나옵니다.</div>`;
 
-    // 지금 상태의 주요 지표 한 줄: 다음 관문 · 남은 이슈 · 다음 관문 전 준비 · 고객사 답
-    const waitLate = waiting.filter((i) => i.overdue).length;
+    // 지금 상태의 주요 지표: 다음 관문 · 남은 이슈 · 다음 관문 전 확정 · 고객사 답
+    // 늦음은 두 말로만 쓴다: '필요일 지남'(날짜 기준), '7일 넘게 답 없음'(대기 기준). 다음 행동이 누구 쪽인지 나눠 보인다
+    const noReply = waiting.filter((i) => i.noReply).length;
+    const gateOpen = gate ? gate.open : [];
+    const by = (status) => gateOpen.filter((i) => i.status === status).length;
+    const gateLate = gateOpen.filter((i) => i.needLate).length;
     const facts = [
       gate && { k: "다음 관문", v: dd(gate.date), d: `${gate.label} ${F.monthDay(gate.date)}` },
       p
-        ? { k: "남은 이슈", v: `${fmt(p.remaining)}건`, d: netWeek(p) > 0 ? `주 ${netWeek(p)}건씩 줄어듦` : netWeek(p) < 0 ? `주 ${-netWeek(p)}건씩 늘어남` : "줄지 않음" }
+        ? { k: "남은 이슈", v: `${fmt(p.remaining)}건`, d: `${p.targetLabel} 범위 · ${netWeek(p) > 0 ? `주 ${netWeek(p)}건씩 줄어듦` : netWeek(p) < 0 ? `주 ${-netWeek(p)}건씩 늘어남` : "줄지 않음"}`, title: `${p.targetLabel} 마일스톤까지의 열린 이슈(에픽·descope 제외). 사이드바 ‘이슈’ 숫자는 열린 이슈 전체` }
         : model.kickoff.active && { k: "킥오프", v: `${model.kickoff.completed}/${model.kickoff.stages.length}단계`, d: model.kickoff.current ? `지금 ${model.kickoff.current.name}` : "끝남" },
-      gate && { k: `${gate.label} 전 준비`, v: `${gate.ready}/${gate.total}`, d: gate.open.filter((i) => i.blocksDate < today).length ? `늦은 것 ${gate.open.filter((i) => i.blocksDate < today).length}건` : "확정 기준" },
-      { k: "고객사 답 기다림", v: `${waiting.length}건`, d: waitLate ? `기한 지남 ${waitLate}건` : "기한 안" },
+      gate && {
+        k: `${gate.label} 전 확정`,
+        v: `${gate.ready}/${gate.total}`,
+        d: gateOpen.length ? [by("received") && `받음(우리 검토) ${by("received")}`, by("requested") && `답 대기 ${by("requested")}`, by("missing") && `없음 ${by("missing")}`].filter(Boolean).join(" · ") : "모두 확정",
+        late: gateLate ? `${Core.LATE.need} ${gateLate}건` : "",
+      },
+      { k: "고객사 답 기다림", v: `${waiting.length}건`, d: noReply ? "" : waiting.length ? `모두 ${Core.WAIT_LIMIT_DAYS}일 안` : "기다리는 것 없음", late: noReply ? `${Core.LATE.wait} ${noReply}건` : "" },
     ].filter(Boolean);
-    const factsHtml = `<dl class="facts">${facts.map((f) => `<div><dt>${esc(f.k)}</dt><dd><b class="num">${esc(f.v)}</b><span>${esc(f.d)}</span></dd></div>`).join("")}</dl>`;
+    const factsHtml = `<dl class="facts">${facts.map((f) => `<div ${f.title ? `title="${esc(f.title)}"` : ""}><dt>${esc(f.k)}</dt><dd><b class="num">${esc(f.v)}</b>${f.d ? `<span>${esc(f.d)}</span>` : ""}${f.late ? lateText(f.late) : ""}</dd></div>`).join("")}</dl>`;
 
-    const decisions = project.decisions?.length
-      ? project.decisions
+    // 상태 칩 옆 이유 칩(누르면 그 화면으로). 리미 말풍선의 '살펴볼 신호' 수와 같은 목록
+    const signalsHtml = health.signals.length
+      ? `<span class="signals">${health.signals.map((sg) => `<button class="chip sig ${sg.cls}" data-go="${esc(sg.view)}"${sg.anchor ? ` data-anchor="${esc(sg.anchor)}"` : ""}${sg.filter ? ` data-filter="${esc(sg.filter)}"` : ""} title="${esc(sg.text)}">${esc(sg.short)} →</button>`).join("")}</span>`
+      : "";
+
+    // 오늘 먼저 할 것 1~3개. 첫 행동이 이 화면의 기본(검은) 버튼이다
+    const first = Core.todayFirst(model);
+    const firstHtml = first.length
+      ? `<div class="first-h">오늘 먼저 할 것</div><ol class="first">${first.map((t, i) => `<li><span class="first-t">${t.html}</span>${actionButton(t.action, i === 0)}</li>`).join("")}</ol>`
+      : `<p class="soft" style="margin:12px 0">급한 일은 없어요. 아래 할 일을 필요일 순으로 보세요.</p>`;
+
+    const decisions = model.decisions.length
+      ? [...model.decisions]
+          .sort((a, b) => (a.dueInfo?.date || "9999").localeCompare(b.dueInfo?.date || "9999"))
           .map(
             (d) =>
-              `<div class="list-row"><div><div class="t">${esc(d.title)}</div><div class="d">권장: ${esc(d.recommend)}${d.due ? ` · 기한 ${esc(d.due)}` : ""}</div></div><button class="btn small" data-ask-limi="${esc(`결정 도와줘: ${d.title}`)}">${icon("chat")}리미와 정리</button></div>`,
+              `<div class="list-row"><div><div class="t">${esc(d.title)}</div><div class="d">권장: ${esc(d.recommend || "-")}</div><div class="d meta">${dueHtml(d.dueInfo)}${checkedHtml(d)}</div></div><button class="btn small" data-ask-limi="${esc(`결정 도와줘: ${d.title}`)}">${icon("chat")}리미와 정리</button></div>`,
           )
           .join("")
       : `<div class="empty"><b>결정할 일이 없어요</b>새 결정 요청은 리미가 모아 둡니다.</div>`;
 
+    // 고객사 답 기다림: 필요일이 지났으면 '필요일 10/8 · 6일 지남'(빨강·아이콘), D+n은 7일을 넘으면 빨강
     const waitingHtml = waiting.length
       ? waiting
           .slice(0, 6)
           .map(
             (item) =>
-              `<button class="row-btn list-row" data-item="${esc(item.id)}"><div><div class="t">${esc(item.title)}</div><div class="d">${item.blocks ? `${esc(item.blocks)} ${F.monthDay(item.blocksDate)} 전에 필요` : "막는 일정 없음"}${item.requested ? ` · ${F.monthDay(item.requested)} 요청` : ""}</div></div><span class="wait ${item.overdue ? "late" : ""} num">D+${item.waitDays}</span></button>`,
+              `<button class="row-btn list-row" data-item="${esc(item.id)}"><div><div class="t">${esc(item.title)}</div><div class="d">${item.blocks ? `${esc(item.blocks)} · ${item.needLate ? lateText(Core.needText(item, today)) : esc(Core.needText(item, today))}` : "막는 일정 없음"}</div><div class="d meta">${item.requested ? `<span>${F.monthDay(item.requested)} 요청</span>` : ""}<span data-internal>${checkedHtml(item)}</span></div></div><span class="wait ${item.noReply ? "late" : ""} num" title="요청한 지 ${item.waitDays}일${item.noReply ? ` · ${Core.LATE.wait}` : ""}">D+${item.waitDays}</span></button>`,
           )
           .join("")
       : `<div class="empty"><b>고객사 답 기다림 없음</b>요청한 자료가 모두 들어왔어요.</div>`;
@@ -627,21 +695,21 @@
       const v = forecast.current;
       const sp = forecast.sprint;
       const late = forecast.views.filter((view) => view.isLate);
-      // 고객사 공유본에는 이슈가 없어 속도를 계산하지 않는다
+      // 속도·완료 예상은 일정 예측이라 공유 보기(미리보기)와 공유본 모두에서 숨긴다
       const statusLine = CLIENT
         ? ""
         : sp?.pace != null
           ? sp.finish
-            ? `하루 ${sp.pace.toFixed(1)}건 → ${F.shortDate(sp.finish)} 완료 예상`
-            : `하루 ${sp.pace.toFixed(1)}건 → 약 ${sp.carryover}건이 다음 스프린트로`
+            ? `하루 ${paceText(sp.pace)} → ${F.shortDate(sp.finish)} 완료 예상`
+            : `하루 ${paceText(sp.pace)} → 약 ${sp.carryover}건이 다음 스프린트로`
           : v.start > forecast.today
             ? `${F.shortDate(v.start)} 시작 · ${sp?.total ?? v.total}건 계획`
             : "첫 근무일이 지나면 예측이 시작됩니다";
       const goalNow = sprintGoal(project, sprintKey(v));
       sprintHtml = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><button class="link-btn" data-sprint="${v.number}" style="font-weight:700;font-size:14px">${esc(v.title)}</button><span class="muted num">${v.closed}/${v.total}</span></div>
-        ${!CLIENT ? `<div class="stat-note" style="margin:4px 0 8px">${goalNow ? `목표: ${esc(goalNow)}` : `<button class="link-btn" data-sprint="${v.number}">목표 적기 →</button>`}</div>` : ""}
+        ${!CLIENT ? `<div class="stat-note" style="margin:4px 0 8px" data-internal>${goalNow ? `목표: ${esc(goalNow)}` : `<button class="link-btn" data-sprint="${v.number}">목표 적기 →</button>`}</div>` : ""}
         <div class="meter"><span style="width:${v.percent}%;background:var(--accent)"></span></div>
-        <div class="stat-note" style="margin-top:6px">${esc(statusLine)}</div>
+        ${statusLine ? `<div class="stat-note" style="margin-top:6px" data-internal>${esc(statusLine)}</div>` : ""}
         ${late.map((view) => `<div class="callout warn" style="margin-top:12px">${icon("alert")}<span><b>${esc(view.title.split(" ")[0])}</b> 마감(${F.monthDay(view.due)})이 지났고 ${view.open}건이 열려 있습니다.</span></div>`).join("")}
         <div class="bar-list" style="margin-top:14px">${forecast.views
           .filter((view) => view.isSprint && view.due >= forecast.today && view !== v)
@@ -652,62 +720,116 @@
           )
           .join("")}</div>`;
     }
+    const ghBasis = forecast ? `<span class="sub" data-internal>GitHub ${esc(whenLabel(forecast.syncedAt))} 기준</span>` : "";
+    const clientBasis = st.sources.client ? `<span class="sub" data-internal>고객사 답 ${esc(whenLabel(st.sources.client))} 기준</span>` : "";
+    const weekRows = todoRows(model);
 
     return `
       <div class="view-head"><div><h1>오늘</h1><p>${esc(project.name)}${phaseLine ? ` · <b>${esc(phaseLine)}</b>` : ""}</p></div></div>
-      <div class="grid g-12">
-        <section class="card brief span-8" data-internal>
+      <div class="grid g-12 home">
+        <section class="card brief span-8 home-brief" data-internal>
           <div class="brief-limi">${limiSvg({ size: 92, mood: health.key, progress: progressOf(model) })}</div>
           <div>
             <div class="when">리미의 브리핑 · ${F.shortDate(today)}</div>
             ${freshLineHtml(model)}
-            <h2>${esc(project.name)} · 지금 상태 ${chip(health)}</h2>
+            <h2>${esc(project.name)} · 지금 상태 ${chip(health)}${signalsHtml}</h2>
             ${factsHtml}
-            <ol>${items.map((item, i) => `<li><button class="row-btn" data-brief="${i}" style="font-size:14px">${item.text}</button></li>`).join("")}</ol>
-            <div class="btn-row"><button class="btn primary" data-open-limi>${icon("chat")}리미와 대화</button></div>
+            ${firstHtml}
+            <div class="btn-row"><button class="btn small" data-open-limi>${icon("chat")}리미와 대화</button></div>
           </div>
         </section>
-        <section class="card hero span-4" data-internal>${verdict}</section>
-        ${model.kickoff.active ? `<section class="card span-12" data-internal><div class="card-head"><div class="ch-title"><h2>킥오프 진행 ${model.kickoff.completed}/${model.kickoff.stages.length}</h2><span class="sub">개발 착수${project.dates?.devStart ? ` ${F.monthDay(project.dates.devStart)}` : ""} 전까지 보입니다</span></div><button class="link-btn" data-go="kickoff">킥오프 화면 →</button></div>${stepperHtml(model)}</section>` : ""}
-        <section class="card span-7" data-internal><div class="card-head"><div class="ch-title"><h2>이번 주 할 일</h2><span class="sub">늦은 것부터</span></div>${model.thisWeek.length > 6 ? `<button class="link-btn" data-week-all>전체 ${model.thisWeek.length}개 →</button>` : ""}</div>${todoHtml(model, 6)}</section>
-        <section class="card span-5 client-span"><div class="card-head"><div class="ch-title"><h2>고객사 답 기다림</h2><span class="sub">급한 것부터</span></div><button class="link-btn" data-go="requests">전체 →</button></div><div class="list">${waitingHtml}</div></section>
-        <section class="card span-12 tl-card">
-          <div class="card-head"><div class="ch-title"><h2>전체 일정</h2><span class="sub">${F.shortDate(project.timeline.start)} ~ ${F.shortDate(project.timeline.end)}</span></div><button class="link-btn" data-go="schedule" data-anchor="schedule-detail" data-internal>자세히 보기 →</button></div>
+        <section class="card hero span-4 home-forecast" data-internal>${verdict}</section>
+        ${model.kickoff.active ? `<section class="card span-12 home-kickoff" data-internal><div class="card-head"><div class="ch-title"><h2>킥오프 진행 ${model.kickoff.completed}/${model.kickoff.stages.length}</h2><span class="sub">개발 착수${project.dates?.devStart ? ` ${F.monthDay(project.dates.devStart)}` : ""} 전까지 보입니다</span></div><button class="link-btn" data-go="kickoff">킥오프 화면 →</button></div>${stepperHtml(model)}</section>` : ""}
+        <section class="card span-7 home-todo" data-internal><div class="card-head"><div class="ch-title"><h2>할 일</h2><span class="sub">필요일·기한 순</span></div>${todoCount(weekRows) > 6 ? `<button class="link-btn" data-week-all>전체 ${todoCount(weekRows)}개 →</button>` : ""}</div>${todoHtml(model, 6)}</section>
+        <section class="card span-5 client-span home-waiting" id="waiting"><div class="card-head"><div class="ch-title"><h2>고객사 답 기다림</h2><span class="sub">급한 것부터</span>${clientBasis}</div><button class="link-btn" data-go="requests">전체 →</button></div><div class="list">${waitingHtml}</div></section>
+        <section class="card span-12 tl-card home-timeline">
+          <div class="card-head"><div class="ch-title"><h2>전체 일정</h2><span class="sub">${F.shortDate(project.timeline.start)} ~ ${F.shortDate(project.timeline.end)}</span>${ghBasis}</div><button class="link-btn" data-go="schedule" data-anchor="schedule-detail" data-internal>자세히 보기 →</button></div>
           ${timelineHtml(model)}
         </section>
-        <section class="card span-6" id="decisions" data-internal><div class="card-head"><h2>결정 필요</h2><span class="sub">권장안 먼저</span></div><div class="list">${decisions}</div></section>
-        <section class="card span-6 client-span"><div class="card-head"><h2>이번 스프린트</h2>${!CLIENT && forecast?.sprint?.status ? chip(FORECAST_STATUS[forecast.sprint.status]) : ""}</div>${sprintHtml}</section>
-        ${risksHtml(project)}
+        <section class="card span-6 home-decisions" id="decisions" data-internal><div class="card-head"><h2>결정 필요</h2><span class="sub">기한 순 · 권장안 먼저</span></div><div class="list">${decisions}</div></section>
+        <section class="card span-6 client-span home-sprint"><div class="card-head"><div class="ch-title"><h2>이번 스프린트</h2>${ghBasis}</div>${!CLIENT && forecast?.sprint?.status ? `<span data-internal>${chip(FORECAST_STATUS[forecast.sprint.status])}</span>` : ""}</div>${sprintHtml}</section>
+        ${risksHtml(model)}
       </div>`;
   }
 
-  // 이번 주 할 일: 업데이트가 물어본 것 + 체크리스트·계약·스프린트에서 나온 할 일. 늦은 것부터
-  const TODO_KIND = { request: "요청", remind: "리마인드", prepare: "준비", review: "검토", contract: "계약", "setup-repo": "세팅", sprint: "스프린트", recheck: "다시 확인" };
+  // 할 일: 업데이트가 물어본 것 + 체크리스트·결정·위험·계약·스프린트. 필요일(막는 일정)·기한 하나로 정렬
   function todoRows(model) {
     const asks = SERVER || !CLIENT ? lastUpdate()?.asks || [] : [];
-    const rows = [];
-    if (asks.length) rows.push({ type: "asks", late: false, text: `업데이트가 물어본 것 ${asks.length}개에 답하기`, date: lastUpdate().at.slice(0, 10) });
-    for (const a of model.thisWeek) rows.push(a);
-    return rows.sort((a, b) => Number(b.late) - Number(a.late) || Number(b.type === "asks") - Number(a.type === "asks") || (a.date || "").localeCompare(b.date || ""));
+    const rows = [...model.thisWeek];
+    if (asks.length) {
+      const label = `업데이트가 물어본 것 ${asks.length}개에 답하기`;
+      // 날짜가 없는 일 중에서는 맨 앞
+      const at = rows.findIndex((r) => !r.date);
+      rows.splice(at < 0 ? rows.length : at, 0, { type: "asks", late: false, date: null, label, text: label });
+    }
+    return rows;
   }
-  function todoHtml(model, limit) {
-    const rows = todoRows(model);
-    if (!rows.length) return '<div class="empty"><b>이번 주 할 일이 없어요</b>요청한 자료의 회신을 기다리는 중입니다.</div>';
+  // 받은 자료 검토는 3건 이상이면 한 줄로 묶는다(펼쳐 볼 수 있게)
+  function groupTodo(rows) {
+    const review = rows.filter((r) => r.type === "review");
+    if (review.length < 3) return rows;
+    const at = rows.indexOf(review[0]);
+    const out = rows.filter((r) => r.type !== "review");
+    const late = review.filter((r) => r.late).length;
+    out.splice(at, 0, { type: "review-group", rows: review, late: late > 0, lateCount: late, date: review[0].date, dateKind: review[0].dateKind });
+    return out;
+  }
+  const todoCount = (rows) => groupTodo(rows).length;
+  function todoTarget(a) {
+    if (a.type === "asks") return "data-update-open";
+    if (a.item) return `data-item="${esc(a.item)}"`;
+    if (a.type === "decision") return 'data-go="overview" data-anchor="decisions"';
+    if (a.type === "risk") return 'data-go="overview" data-anchor="risks"';
+    if (a.type === "sprint") return a.sprint ? `data-sprint="${esc(a.sprint)}"` : 'data-go="schedule" data-anchor="schedule-detail"';
+    if (a.type === "contract") return 'data-go="kickoff" data-anchor="contract"';
+    if (a.type === "recheck") return 'data-go="kickoff" data-filter="recheck"';
+    return "";
+  }
+  // 날짜 칸: '필요일 10/8 · 6일 지남'(빨강·아이콘), '필요 11/2 · D-19', '기한 10/16 · D-2'
+  function todoDate(a) {
+    if (a.raw) return `<span class="todo-date" title="날짜가 아닌 옛 기한">기한 ${esc(a.raw)}</span>`;
+    if (!a.date) return "";
+    const days = F.daysBetween(realToday(), a.date);
+    const kind = days < 0 && a.dateKind === "필요" ? "필요일" : a.dateKind || "";
+    const text = `${kind} ${F.monthDay(a.date)} · ${Core.dayLabel(days)}`;
+    return `<span class="todo-date num ${days < 0 ? "late" : ""}">${days < 0 ? icon("alert") : ""}${esc(text)}</span>`;
+  }
+  function todoRowHtml(a) {
+    return `<button class="row-btn list-row todo-row" ${todoTarget(a)}><div><div class="t">${a.why ? `<span class="chip crit why">${esc(a.why)}</span>` : ""}${esc(a.label || a.text)}</div></div>${todoDate(a)}</button>`;
+  }
+  function todoHtml(model, limit = Infinity, rowsIn = null) {
+    const rows = groupTodo(rowsIn || todoRows(model));
+    if (!rows.length) return '<div class="empty"><b>할 일이 없어요</b>요청한 자료의 회신을 기다리는 중입니다.</div>';
     return `<div class="list">${rows
       .slice(0, limit)
-      .map((a) => {
-        const target = a.type === "asks" ? "data-update-open" : a.item ? `data-item="${esc(a.item)}"` : a.type === "contract" ? 'data-go="kickoff" data-anchor="contract"' : a.type === "sprint" ? 'data-go="schedule" data-anchor="schedule-detail"' : a.type === "recheck" ? 'data-go="kickoff" data-filter="recheck"' : "";
-        const kind = a.type === "asks" ? "답하기" : TODO_KIND[a.type] || "";
-        return `<button class="row-btn list-row" ${target}><div><div class="t">${a.late ? `<span class="chip crit" style="margin-right:6px">${icon("alert")}늦음</span>` : ""}${esc(a.text)}</div></div><span class="muted" style="font-size:12px;white-space:nowrap">${esc(kind)}${a.date ? ` · ${F.monthDay(a.date)}` : ""}</span></button>`;
-      })
-      .join("")}${rows.length > limit ? `<div class="card-foot"><button class="link-btn" data-week-all>외 ${rows.length - limit}개 모두 보기</button></div>` : ""}</div>`;
+      .map((a) =>
+        a.type === "review-group"
+          ? `<details class="todo-group"><summary class="list-row todo-row"><div><div class="t">${a.lateCount ? `<span class="chip crit why">${esc(Core.LATE.need)} ${a.lateCount}</span>` : ""}받은 자료 검토·확정 ${a.rows.length}건 <span class="muted" style="font-weight:500">펼치기</span></div></div>${todoDate(a)}</summary><div class="list">${a.rows.map(todoRowHtml).join("")}</div></details>`
+          : todoRowHtml(a),
+      )
+      .join("")}</div>`;
   }
   function openWeekDrawer() {
     const model = getModel();
-    const rows = todoRows(model);
+    const rows = groupTodo(todoRows(model));
     const late = rows.filter((r) => r.late).length;
-    openDrawer({ kicker: `${icon("check")} 할 일`, title: "이번 주 할 일", sub: `${rows.length}개${late ? ` · 늦음 ${late}` : ""}`, body: todoHtml(model, rows.length) });
+    openDrawer({ kicker: `${icon("check")} 할 일`, title: "할 일", sub: `${rows.length}개 · 필요일·기한 순${late ? ` · 늦음 ${late}` : ""}`, body: todoHtml(model) });
     hydrateIcons($("#drawer-body"));
+  }
+
+  // 오늘 먼저 할 것의 '리마인드 초안': 승인 대기열에 넣고(이미 있으면 건너뜀) 대기열을 연다. 보내는 것은 사람이다
+  function queueReminders(ids) {
+    const model = getModel();
+    let added = 0;
+    for (const id of ids) {
+      const item = model.checklist.find((i) => i.id === id);
+      if (!item || queueOf(model.project.id).some((q) => q.itemId === id)) continue;
+      const receive = item.receiveAt || model.project.receiveDefault || "notion";
+      addToQueue({ kind: "reminder", itemId: item.id, title: `${item.title} 리마인드`, to: model.project.clientContact || `${model.project.client} 담당자`, channel: RECEIVE[receive].label, receive, text: reminderText(model, item), by: "limi" });
+      added += 1;
+    }
+    toast(added ? `리마인드 초안 ${added}건을 승인 대기열에 넣었습니다` : "이미 승인 대기열에 있습니다");
+    openQueue();
   }
 
   // ---------------------------------------------------------------- WBS · 스프린트
@@ -862,21 +984,22 @@
     hydrateIcons($("#drawer-body"));
   }
 
-  function risksHtml(project) {
-    const risks = project.risks || [];
+  // 위험과 대응: 담당·기한(다시 볼 날)·확인일. 기한이 다가오거나 지난 위험은 할 일에도 올라간다
+  function risksHtml(model) {
+    const risks = model.risks || [];
     if (!risks.length) return "";
     const level = {
       high: { cls: "crit", icon: "alert", label: "높음" },
       mid: { cls: "warn", icon: "alert", label: "중간" },
       low: { cls: "neutral", icon: "minus", label: "낮음" },
     };
-    return `<section class="card span-12" data-internal><div class="card-head"><h2>위험과 대응</h2><span class="sub">영향 큰 순 · 내부용</span></div>
-      <div style="overflow-x:auto"><table class="risk-table"><tbody>${risks
+    return `<section class="card span-12 home-risks" id="risks" data-internal><div class="card-head"><h2>위험과 대응</h2><span class="sub">영향 큰 순 · 내부용</span></div>
+      <div class="risk-list" role="list">${risks
         .map(
           (r) =>
-            `<tr><td style="width:84px">${chip(level[r.level] || level.mid)}</td><td><div class="r-title">${esc(r.title)}</div><div class="r-detail">${esc(r.detail || "")}</div></td><td style="width:45%"><span class="soft">→ ${esc(r.mitigation || "")}</span></td></tr>`,
+            `<div class="risk-row" role="listitem"><div class="r-level">${chip(level[r.level] || level.mid)}</div><div class="r-main"><div class="r-title">${esc(r.title)}</div><div class="r-detail">${esc(r.detail || "")}</div></div><div class="r-mit soft">→ ${esc(r.mitigation || "")}</div><div class="r-meta"><div>담당 ${r.owner ? esc(r.owner) : '<span class="muted">미정</span>'}</div><div>${dueHtml(r.dueInfo)}</div><div>${checkedHtml(r)}</div></div></div>`,
         )
-        .join("")}</tbody></table></div></section>`;
+        .join("")}</div></section>`;
   }
 
   function syncLabel(iso) {
@@ -972,7 +1095,7 @@
       </div>
       <div class="grid g-12" style="margin-bottom:16px">
         <section class="card span-12"><div class="card-head"><h2>킥오프 ${model.kickoff.completed}/${model.kickoff.stages.length}단계</h2><button class="link-btn" data-doc="kickoff">킥오프 회의 자료 →</button></div>${stepperHtml(model)}</section>
-        <section class="card span-7"><div class="card-head"><h2>이번 주 할 일</h2><span class="sub">요청 시작일이 지난 것부터</span></div>${weekHtml(model)}</section>
+        <section class="card span-7"><div class="card-head"><h2>할 일</h2><span class="sub">필요일·기한 순</span></div>${weekHtml(model)}</section>
         <section class="card span-5"><div class="card-head"><h2>개발 범위</h2><button class="link-btn" data-go="requests">고객사 요청 목록 →</button></div>${scopeHtml(project)}</section>
         ${contractHtml(model)}
       </div>
@@ -1695,7 +1818,8 @@
         : F.addDays(p.target, 2);
     const rspan = Math.max(1, F.daysBetween(rangeStart, rangeEnd));
     const rx = (date) => `${(F.daysBetween(rangeStart, date) / rspan) * 100}%`;
-    const gap = p.requiredVelocity ? p.requiredVelocity - p.velocity : 0;
+    // 보이는 숫자끼리 맞도록 반올림한 값으로 뺀다(146 − 128 = 18)
+    const gap = p.requiredVelocity ? Math.round(p.requiredVelocity) - Math.round(p.velocity) : 0;
 
     return `
       <div class="view-head">
@@ -1713,7 +1837,7 @@
           <div class="s">낙관 ${F.monthDay(p.optimistic)} · 비관 ${F.monthDay(p.pessimistic)} · 검은 선 목표 ${F.monthDay(p.target)}</div></div>
         <div><div class="k">지금 속도면 마감(${F.monthDay(p.target)})에 남을 이슈</div><div class="v num">~${fmt(p.remainingAtTarget)}건</div><div class="s">${p.netFinish ? `유입까지 감안한 완료 ${F.shortDate(p.netFinish)}` : "유입이 처리보다 많아 끝나는 날을 계산할 수 없음"}</div></div>
         <div><div class="k">주마다 닫음 · 새로 생김</div><div class="v num">${fmt(p.velocity)} · ${fmt(p.inflow)}건</div><div class="s">${netWeek(p) > 0 ? `주 ${netWeek(p)}건씩 줄어듦` : netWeek(p) < 0 ? `주 ${-netWeek(p)}건씩 늘어남` : "줄지 않음"} · 최근 ${p.weeks}주 가중 평균 · 남은 이슈 ${fmt(p.remaining)}건</div></div>
-        <div><div class="k">${F.monthDay(p.target)}에 맞추려면</div><div class="v num">주 ${fmt(p.requiredVelocity)}건</div><div class="s">${gap > 0 ? `지금보다 주 ${fmt(gap)}건(${fmt((gap / p.velocity) * 100)}%) 더 닫거나 범위를 줄여야 함` : "지금 속도로 충분"}</div></div>
+        <div><div class="k">${F.monthDay(p.target)}에 맞추려면</div><div class="v num">주 ${fmt(p.requiredVelocity)}건</div><div class="s">${gap > 0 ? `지금보다 주 ${fmt(gap)}건(${fmt((gap / Math.round(p.velocity)) * 100)}%) 더 닫거나 범위를 줄여야 함` : "지금 속도로 충분"}</div></div>
       </div>
       <div class="grid g-12">
         <section class="card span-12">
@@ -1729,7 +1853,7 @@
             <label class="slider">새 이슈 유입 <output>${s.inflowPct > 0 ? "+" : ""}${s.inflowPct}%</output><input type="range" min="-100" max="50" step="5" value="${s.inflowPct}" data-scn="inflowPct"/></label>
             <label class="slider">범위 조정 <output>-${s.descope}건</output><input type="range" min="0" max="${Math.max(10, base.project.remaining)}" step="1" value="${s.descope}" data-scn="descope"/></label>
           </div>
-          <div class="scenario-result">${scenarioOn ? `가정대로면 <b>${F.monthDay(p.target)}에 ~${fmt(p.remainingAtTarget)}건</b>(지금 ${fmt(base.project.remainingAtTarget)}건) · 새 이슈가 멈추면 ${F.shortDate(p.expected)} 완료 · 상태 ${chip(st)}` : `슬라이더로 인원 추가(속도), 내부 QA 정리(유입), 범위 조정(descope)의 효과를 봅니다. ${base.project.inflow > base.project.velocity ? `지금은 <b>유입이 처리보다 주 ${fmt(base.project.inflow - base.project.velocity)}건 많아</b> 남은 이슈가 늘고 있어요.` : ""}`}</div>
+          <div class="scenario-result">${scenarioOn ? `가정대로면 <b>${F.monthDay(p.target)}에 ~${fmt(p.remainingAtTarget)}건</b>(지금 ${fmt(base.project.remainingAtTarget)}건) · 새 이슈가 멈추면 ${F.shortDate(p.expected)} 완료 · 상태 ${chip(st)}` : `슬라이더로 인원 추가(속도), 내부 QA 정리(유입), 범위 조정(descope)의 효과를 봅니다. ${-netWeek(base.project) > 0 ? `지금은 <b>유입이 처리보다 주 ${fmt(-netWeek(base.project))}건 많아</b> 남은 이슈가 늘고 있어요.` : ""}`}</div>
           <div class="btn-row" style="margin-top:10px" data-internal><button class="btn small" data-ask-limi="${esc(`이 가정으로 ${F.monthDay(p.target)} 맞추려면 어떻게 해야 해? (속도 ${s.velocityPct}%, 유입 ${s.inflowPct}%, 범위 -${s.descope}건)`)}">${icon("chat")}리미에게 해석 묻기</button></div>
         </section>
         <section class="card span-5">
@@ -2020,15 +2144,8 @@
   }
 
   function weekHtml(model, limit = 8) {
-    const week = model.thisWeek;
-    if (!week.length) return '<div class="empty"><b>이번 주 할 일이 없어요</b>요청한 자료의 회신을 기다리는 중입니다.</div>';
-    return `<div class="list">${week
-      .slice(0, limit)
-      .map((a) => {
-        const target = a.item ? `data-item="${esc(a.item)}"` : a.type === "contract" ? 'data-go="kickoff" data-anchor="contract"' : a.type === "sprint" ? 'data-go="schedule"' : a.type === "recheck" ? 'data-go="kickoff" data-filter="recheck"' : "";
-        return `<button class="row-btn list-row" ${target}><div><div class="t">${a.late ? `<span class="chip crit" style="margin-right:6px">${icon("alert")}늦음</span>` : ""}${esc(a.text)}</div></div><span class="muted num" style="font-size:12px">${a.date ? F.monthDay(a.date) : ""}</span></button>`;
-      })
-      .join("")}${week.length > limit ? `<div class="card-foot">외 ${week.length - limit}개</div>` : ""}</div>`;
+    const rows = groupTodo(todoRows(model));
+    return `${todoHtml(model, limit)}${rows.length > limit ? `<div class="card-foot"><button class="link-btn" data-week-all>전체 ${rows.length}개 →</button></div>` : ""}`;
   }
 
   function scopeHtml(project) {
@@ -2462,6 +2579,7 @@
     chartRenderers = [];
     const model = getModel();
     const content = $("#content");
+    document.body.dataset.view = state.view;
     content.innerHTML = (VIEWS[state.view] || renderOverview)(model);
     if (state.view === "schedule") {
       mountScheduleCharts(model);
@@ -2497,6 +2615,7 @@
     if (!t) return;
     if (t.matches(".nav-btn")) return navigate(t.dataset.view);
     if (t.hasAttribute("data-week-all")) return openWeekDrawer();
+    if (t.dataset.remind) return queueReminders(t.dataset.remind.split(","));
     if (t.dataset.wbsToggle) {
       const n = Number(t.dataset.wbsToggle);
       if (state.wbsOpen.has(n)) state.wbsOpen.delete(n);
@@ -2723,6 +2842,7 @@
     openQueue,
     openSrsWizard,
     addToQueue,
+    queueReminders,
     requestText,
     reminderText,
     forecastFor: (scenario) => forecastFor(PROJECTS[state.projectId], scenario),
