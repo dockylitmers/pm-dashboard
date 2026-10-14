@@ -680,6 +680,13 @@
           )
           .join("")
       : `<div class="empty"><b>결정할 일이 없어요</b>새 결정 요청은 리미가 모아 둡니다.</div>`;
+    // 최근 30일 안에 정한 것(무엇으로 정했는지·날짜). 결정 필요가 없으면 펼쳐 둔다
+    const recentDone = model.resolvedDecisions.filter((d) => isDateStr(d.decidedAt) && F.daysBetween(d.decidedAt, today) <= 30).slice(0, 5);
+    const doneHtml = recentDone.length
+      ? `<details class="resolved" ${model.decisions.length ? "" : "open"}><summary>최근 정한 것 ${recentDone.length}건</summary><div class="list">${recentDone
+          .map((d) => `<div class="list-row"><div><div class="t">${esc(d.title)}</div><div class="d done-t">${icon("ok")}${esc(d.result)}</div><div class="d meta"><span>${F.monthDay(d.decidedAt)} 결정</span>${d.src ? `<span title="${esc(d.src)}">${esc(shortSrc(d.src))}</span>` : ""}</div></div></div>`)
+          .join("")}</div></details>`
+      : "";
 
     // 고객사 답 기다림: 필요일이 지났으면 '필요일 10/8 · 6일 지남'(빨강·아이콘), D+n은 7일을 넘으면 빨강
     const waitingHtml = waiting.length
@@ -749,7 +756,7 @@
           <div class="card-head"><div class="ch-title"><h2>전체 일정</h2><span class="sub">${F.shortDate(project.timeline.start)} ~ ${F.shortDate(project.timeline.end)}</span>${ghBasis}</div><button class="link-btn" data-go="schedule" data-anchor="schedule-detail" data-internal>자세히 보기 →</button></div>
           ${timelineHtml(model)}
         </section>
-        <section class="card span-6 home-decisions" id="decisions" data-internal><div class="card-head"><h2>결정 필요</h2><span class="sub">기한 순 · 권장안 먼저</span></div><div class="list">${decisions}</div></section>
+        <section class="card span-6 home-decisions" id="decisions" data-internal><div class="card-head"><h2>결정 필요</h2><span class="sub">기한 순 · 권장안 먼저</span></div><div class="list">${decisions}</div>${doneHtml}</section>
         <section class="card span-6 client-span home-sprint"><div class="card-head"><div class="ch-title"><h2>이번 스프린트</h2>${ghBasis}</div>${!CLIENT && forecast?.sprint?.status ? `<span data-internal>${chip(FORECAST_STATUS[forecast.sprint.status])}</span>` : ""}</div>${sprintHtml}</section>
         ${risksHtml(model)}
       </div>`;

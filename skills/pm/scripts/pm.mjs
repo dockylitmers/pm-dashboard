@@ -86,7 +86,9 @@ commands.help = () => {
   decision add "제목" --recommend 권장안 --due 기한 [--src 출처] [--guess]
   decision set <번호> [--title t] [--recommend r] [--due 기한 | --no-due] [--src 출처] [--guess]
   decision check <번호...> --src 출처 [--guess]    원본에서 다시 확인함(값은 그대로)
-  decision done <번호> [--note 결과]               결정됨: 목록에서 뺀다
+  decision done <번호> --result 결과 [--date 결정한 날] [--src 출처]
+                                  결정됨: 목록에서 빼고 결과·날짜를 해결된 결정에 남긴다
+  decision resolved [--json]      해결된 결정 (최근 것부터)
   risk [--json]                   위험 목록
   risk add "제목" --level high|mid|low [--detail 내용] [--mitigation 대응] [--owner 담당] [--due 기한] [--src 출처]
   risk set <번호> [--title] [--level] [--detail] [--mitigation] [--owner] [--due] [--src] [--guess]
@@ -313,10 +315,11 @@ function statusSummary(m) {
     readiness,
     requestSheet: sh.stats,
     missing: missing.map((i) => ({ id: i.id, title: i.title, ball: i.ball, askBy: i.askBy, blocks: i.blocks || null })),
-    waitingOnClient: waiting.map((i) => ({ id: i.id, title: i.title, waitDays: i.waitDays, overdue: i.overdue, blocks: i.blocks || null })),
+    waitingOnClient: waiting.map((i) => ({ id: i.id, title: i.title, waitDays: i.waitDays, overdue: i.overdue, noReply: i.noReply, needLate: i.needLate, blocks: i.blocks || null, blocksDate: i.blocksDate || null })),
     contract: contract ? { review: contract.review, nextPayment: contract.next ? { name: contract.next.name, trigger: contract.next.trigger, due: contract.next.dueDate } : null } : null,
-    decisions: m.decisions.map(({ dueInfo, n, ...d }) => ({ ...d, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late })),
-    risks: m.risks.map(({ dueInfo, n, ...r }) => ({ ...r, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late })),
+    resolvedDecisions: m.resolvedDecisions.slice(0, 10),
+    decisions: m.decisions.map(({ dueInfo, n, ...d }) => ({ ...d, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late, dueInvalid: !!dueInfo?.invalid })),
+    risks: m.risks.map(({ dueInfo, n, ...r }) => ({ ...r, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late, dueInvalid: !!dueInfo?.invalid })),
     approvalQueue: (project.queue || []).map((q) => ({ id: q.id, title: q.title })),
   };
 }
@@ -843,13 +846,32 @@ function rowsCommand(args, kind) {
     }
     return w.save(id, project);
   }
-  if (sub === "done" || sub === "remove") {
+  // 결정됨: 결정 필요 목록에서 빼고, 무엇으로 정했는지(결과)와 날짜를 해결된 결정(resolvedDecisions)에 남긴다
+  if (kind === "decision" && sub === "done") {
+    const [index] = pickRows(rows, rest.slice(0, 1), what);
+    const result = [args.result, args.note].find((v) => typeof v === "string" && v.trim());
+    if (!result) throw new UsageError('무엇으로 정했는지 --result로 적으세요 (예: pm decision done 1 --result "웹 결제로 출시, 앱 결제는 2차" --date 2026-10-12 --src "주간 회의")');
+    const decidedAt = args.date === undefined ? today() : parseDate(args.date, "date");
+    const [row] = rows.splice(index, 1);
+    const done = { title: row.title, recommend: row.recommend || "", ...(row.due ? { due: row.due } : {}), result: result.trim(), decidedAt, recordedAt: today(), src: typeof args.src === "string" && args.src.trim() ? args.src.trim() : "PM" };
+    project.resolvedDecisions = [done, ...(project.resolvedDecisions || [])];
+    w.save(id, project);
+    return console.log(`결정됨으로 옮겼습니다: ${done.title} — ${done.result} (${F.shortDate(decidedAt)} 결정)\n결정 내용은 체크리스트·일정에도 반영하세요 (pm set, project.json).`);
+  }
+  if (kind === "risk" && sub === "remove") {
     const [index] = pickRows(rows, rest.slice(0, 1), what);
     const [row] = rows.splice(index, 1);
     w.save(id, project);
-    return console.log(`${what} 목록에서 뺐습니다: ${row.title}${typeof args.note === "string" ? ` — ${args.note}` : ""}${kind === "decision" ? "\n결정 내용은 체크리스트·일정에 반영하세요 (pm set, project.json)." : ""}`);
+    return console.log(`${what} 목록에서 뺐습니다: ${row.title}${typeof args.note === "string" ? ` — ${args.note}` : ""}`);
   }
-  throw new UsageError(`pm ${kind} [list | add | set | check | ${kind === "decision" ? "done" : "remove"}] — pm help`);
+  if (kind === "decision" && sub === "resolved") {
+    const done = Core.model(Core.normalize(project, today()), { today: today() }).resolvedDecisions;
+    if (args.json) return console.log(JSON.stringify(done, null, 2));
+    if (!done.length) return console.log("해결된 결정이 없습니다.");
+    for (const d of done) console.log(`${F.monthDay(d.decidedAt)}  ${d.title} — ${d.result}${d.src ? ` (${d.src})` : ""}`);
+    return;
+  }
+  throw new UsageError(`pm ${kind} [list | add | set | check | ${kind === "decision" ? "done | resolved" : "remove"}] — pm help`);
 }
 
 commands.decision = (args) => rowsCommand(args, "decision");
@@ -923,6 +945,20 @@ commands.serve = (args) => serve(ws(args), { port: Number(args.port) || 4477, op
 
 // ---------------------------------------------------------------- 실행
 
+// 전체 업데이트(headless Claude)가 부르는 CLI는 지우거나 되돌리기 어려운 명령을 쓸 수 없다(PM_DEEP_UPDATE=1).
+// 지시문으로도 막지만, 지시를 어겨도 데이터가 지워지지 않게 CLI에서 한 번 더 막는다
+function deepBlocked(name, args) {
+  const [sub] = args._;
+  if (["init", "setup", "install-cli", "update", "serve", "schedule", "scope"].includes(name) && !(name === "schedule" && (!sub || sub === "status")) && !(name === "scope" && args.set === undefined && args.add === undefined && args.remove === undefined)) return true;
+  if ((name === "decision" || name === "decisions") && sub === "done") return true;
+  if ((name === "risk" || name === "risks") && (sub === "remove" || sub === "done")) return true;
+  if (name === "config" && args._.length > 1) return true;
+  if (name === "contract" && sub) return true;
+  if (name === "sheet" && args["mark-sent"]) return true;
+  if (name === "sprint" && typeof args.goal === "string" && !args.goal.trim()) return true;
+  return false;
+}
+
 const [name = "help", ...rest] = process.argv.slice(2);
 const command = commands[name];
 if (!command) {
@@ -931,7 +967,10 @@ if (!command) {
   process.exit(2);
 }
 try {
-  await command(parseArgs(rest));
+  const parsed = parseArgs(rest);
+  if (process.env.PM_DEEP_UPDATE === "1" && deepBlocked(name, parsed))
+    throw new UsageError(`전체 업데이트 중에는 'pm ${[name, ...parsed._].join(" ")}'을(를) 쓸 수 없습니다(지우거나 되돌리기 어려운 변경). 필요하면 asks로 PM에게 물으세요.`);
+  await command(parsed);
 } catch (error) {
   console.error(error instanceof UsageError ? error.message : error.stack || String(error));
   process.exit(1);

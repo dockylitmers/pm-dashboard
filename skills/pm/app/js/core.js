@@ -360,6 +360,8 @@
       today,
       checklist: items,
       decisions: decisionsOf(project, today),
+      // 해결된 결정: 최근에 정한 것부터(무엇으로 정했는지와 날짜)
+      resolvedDecisions: [...(project.resolvedDecisions || [])].sort((a, b) => (b.decidedAt || "").localeCompare(a.decidedAt || "")),
       risks: risksOf(project, today),
       readiness: readiness(items),
       // 고객사 답 기다림: 막히는 일정이 가까운 것부터(가장 오래된 것이 아니라 가장 급한 것)
@@ -640,7 +642,7 @@
   // 고객사 공유본에서 빼는 내부 정보
   function clientSafe(project) {
     const copy = JSON.parse(JSON.stringify(project));
-    for (const key of ["decisions", "risks", "team", "queue", "notes", "contract", "sprints"]) delete copy[key];
+    for (const key of ["decisions", "resolvedDecisions", "risks", "team", "queue", "notes", "contract", "sprints"]) delete copy[key];
     // 출처 링크는 고객 소통 공간(Notion)만 남긴다. GitHub 이슈·저장소 문서 경로는 내부 정보다
     const sharedRes = (res) => (res && /notion\.(so|site|com)/.test(res.url || "") && !/#\d|github/i.test(res.label || "") ? res : undefined);
     copy.checklist = (copy.checklist || []).map(({ internal, history, checked, res, ...rest }) => ({ ...rest, ...(sharedRes(res) ? { res } : {}) }));

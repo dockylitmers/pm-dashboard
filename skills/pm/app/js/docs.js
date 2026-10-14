@@ -156,6 +156,11 @@
         out.push("", "■ 결정 필요");
         for (const d of m.decisions) out.push(`- ${d.title} — 권장: ${d.recommend}${d.dueInfo ? ` (기한 ${dueText(d.dueInfo)})` : ""}`);
       }
+      const done = (m.resolvedDecisions || []).filter((d) => d.decidedAt && F.daysBetween(d.decidedAt, today) <= 7);
+      if (done.length) {
+        out.push("", "■ 이번 주 정한 것");
+        for (const d of done) out.push(`- ${d.title} — ${d.result} (${F.monthDay(d.decidedAt)})`);
+      }
       if (m.risks?.length) {
         out.push("", "■ 위험");
         for (const r of m.risks.slice(0, 3)) out.push(`- ${r.title} → ${r.mitigation}${r.owner || r.dueInfo ? ` (${[r.owner && `담당 ${r.owner}`, r.dueInfo && `기한 ${dueText(r.dueInfo)}`].filter(Boolean).join(", ")})` : ""}`);

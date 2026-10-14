@@ -572,8 +572,8 @@
       addMessage(
         "bot",
         decisions.length
-          ? `결정할 일 ${decisions.length}건이에요${decisions.some((d) => d.dueInfo?.late) ? ` (기한 지남 ${decisions.filter((d) => d.dueInfo?.late).length}건)` : ""}.\n${decisions.map((d) => `• <b>${esc(d.title)}</b> — 권장: ${esc(d.recommend)} (기한 ${dueOf(d)})`).join("\n")}`
-          : "지금 결정할 일은 없어요.",
+          ? `결정할 일 ${decisions.length}건이에요${decisions.some((d) => d.dueInfo?.late) ? ` (기한 지남 ${decisions.filter((d) => d.dueInfo?.late).length}건)` : ""}.\n${decisions.map((d) => `• <b>${esc(d.title)}</b> — 권장: ${esc(d.recommend)} (기한 ${dueOf(d)})`).join("\n")}${recentDone()}`
+          : `지금 결정할 일은 없어요.${recentDone()}`,
       );
     }
   }
