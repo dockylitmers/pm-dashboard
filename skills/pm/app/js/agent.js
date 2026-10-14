@@ -71,7 +71,7 @@
     els.fabBubble.innerHTML = `리미<small>${esc(model.health.label)}${signals ? ` · 살펴볼 신호 ${signals}개` : ""} · 눌러서 브리핑</small>`;
     els.fab.setAttribute("aria-label", `리미와 대화하기 · ${model.health.label}${signals ? ` · 살펴볼 신호 ${signals}개` : ""}`);
     els.fabDot.hidden = !(
-      model.waiting.some((item) => item.overdue) || model.health.level >= 2
+      model.waiting.some((item) => item.noReply || item.needLate) || model.health.level >= 2
     );
     els.mood.textContent = MOOD_TEXT[mood];
     const connected = claudeReady();

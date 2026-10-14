@@ -540,7 +540,7 @@
       parts.push(`<span class="${fail("github") ? "bad" : ""}">${fail("github") ? icon("alert") : ""}GitHub ${ghAt ? esc(whenLabel(ghAt)) : "받은 적 없음"}${fail("github") ? " (이번에 못 받음)" : ""}</span>`);
     if (st.sources.client || fail("deep"))
       parts.push(`<span class="${fail("deep") ? "bad" : ""}" ${fail("deep") ? `title="${esc(fail("deep").text)}"` : ""}>${fail("deep") ? icon("alert") : ""}고객사 답 ${st.sources.client ? esc(whenLabel(st.sources.client)) : "읽은 적 없음"}${fail("deep") ? " (이번에 못 읽음)" : ""}</span>`);
-    if (st.state === "stale") parts.push(`<span class="old">${icon("alert")}업데이트 ${esc(agoLabel(st.ageHours))}</span>`);
+    if (st.stale) parts.push(`<span class="old">${icon("alert")}업데이트 ${esc(agoLabel(st.ageHours))}</span>`);
     const guess = model.recheck.filter((i) => i.guess).length;
     if (model.recheck.length) parts.push(`<span>${guess === model.recheck.length ? `추정 ${guess}` : `다시 확인 ${model.recheck.length}${guess ? `(추정 ${guess})` : ""}`}</span>`);
     if (!parts.length) return "";
@@ -1044,9 +1044,12 @@
       };
     });
     const q = f.q.trim().toLowerCase();
+    // '우리 검토': 받은 자료 중 공이 우리에게 있는 것(할 일의 '받은 자료 검토·확정'과 같은 기준)
+    const isReview = (item) => item.status === "received" && item.ball === "us";
+    const reviewCount = checklist.filter(isReview).length;
     const visible = checklist.filter(
       (item) =>
-        (f.status === "all" || (f.status === "recheck" ? item.recheck : item.status === f.status)) &&
+        (f.status === "all" || (f.status === "recheck" ? item.recheck : f.status === "review" ? isReview(item) : item.status === f.status)) &&
         (f.category === "all" || item.cat === f.category) &&
         (!q ||
           `${item.title} ${item.note || ""} ${item.res?.label || ""}`
@@ -1086,8 +1089,8 @@
                 <td>${chip(STATUS[item.status])}</td>
                 <td class="c-ball"><span class="ball ${esc(item.ball)}">${esc(BALL[item.ball] || "-")}</span></td>
                 <td class="c-res">${item.res?.url ? `<span class="res">${icon("link")}<span>${esc(item.res.label)}</span></span>` : item.res?.label ? `<span class="res">${icon("doc")}<span>${esc(item.res.label)}</span></span>` : `<span class="res none">${icon("plug")}<span>연결 안 됨</span></span>`}</td>
-                <td>${item.waitDays != null ? `<span class="wait ${item.overdue ? "late" : ""} num">D+${item.waitDays}</span>` : item.status === "missing" && item.askBy ? `<span class="wait ${item.late ? "late" : ""} num" title="이 날까지 요청해야 일정에 맞음">~${F.monthDay(item.askBy)} 요청</span>` : item.due ? `<span class="wait ${item.overdue ? "late" : ""} num">~${F.monthDay(item.due)}</span>` : '<span class="muted">-</span>'}</td>
-                <td class="c-blocks"><span class="soft" style="font-size:12px">${esc(item.blocks || "-")}${item.blocksDate ? ` ${F.monthDay(item.blocksDate)}` : ""}</span></td>
+                <td>${item.waitDays != null ? `<span class="wait ${item.noReply ? "late" : ""} num" ${item.noReply ? `title="${esc(Core.LATE.wait)}"` : ""}>D+${item.waitDays}</span>` : item.status === "missing" && item.askBy ? `<span class="wait ${item.late ? "late" : ""} num" title="이 날까지 요청해야 일정에 맞음${item.late ? ` · ${Core.LATE.ask}` : ""}">~${F.monthDay(item.askBy)} 요청</span>` : item.due ? `<span class="wait num">~${F.monthDay(item.due)}</span>` : '<span class="muted">-</span>'}</td>
+                <td class="c-blocks">${item.needLate ? `<span class="late-t" style="font-size:12px" title="${esc(Core.LATE.need)}">${icon("alert")}${esc(item.blocks || "")} ${F.monthDay(item.blocksDate)}</span>` : `<span class="soft" style="font-size:12px">${esc(item.blocks || "-")}${item.blocksDate ? ` ${F.monthDay(item.blocksDate)}` : ""}</span>`}</td>
               </tr>`,
             )
             .join("")}
@@ -1120,14 +1123,14 @@
           <button data-status="all" aria-pressed="${f.status === "all"}">전체<span class="n">${checklist.length}</span></button>
           ${["missing", "requested", "received", "confirmed", "not_needed"].map((key) => `<button data-status="${key}" aria-pressed="${f.status === key}">${STATUS[key].label}<span class="n">${counts[key]}</span></button>`).join("")}
         </div>
-        ${model.recheck.length ? `<div class="seg" role="group" aria-label="최신화"><button data-status="recheck" aria-pressed="${f.status === "recheck"}" title="추정 값과 ${Core.STALE_DAYS}일 넘게 확인하지 않은 값">다시 확인<span class="n">${model.recheck.length}</span></button></div>` : ""}
+        ${model.recheck.length || reviewCount ? `<div class="seg" role="group" aria-label="할 일로 거르기">${reviewCount ? `<button data-status="review" aria-pressed="${f.status === "review"}" title="받은 자료 중 우리가 검토·확정할 것">우리 검토<span class="n">${reviewCount}</span></button>` : ""}${model.recheck.length ? `<button data-status="recheck" aria-pressed="${f.status === "recheck"}" title="추정 값과 ${Core.STALE_DAYS}일 넘게 확인하지 않은 값">다시 확인<span class="n">${model.recheck.length}</span></button>` : ""}</div>` : ""}
         ${f.category !== "all" ? `<button class="chip outline" data-cat="all">${esc(project.categories.find((c) => c.id === f.category)?.name)} ✕</button>` : ""}
         <span style="flex:1"></span>
         <label class="sr-only" for="kick-q">항목 찾기</label>
         <input id="kick-q" class="search" type="search" placeholder="항목 찾기" value="${esc(f.q)}" />
       </div>
       ${groups || `<div class="card empty"><b>조건에 맞는 항목이 없어요</b>거르기를 풀어 보세요.</div>`}
-      <p class="muted" style="font-size:12px">공: 지금 다음 행동을 해야 하는 쪽. 대기: 요청한 날부터 센 날짜(D+7을 넘으면 빨간색). 확인: 값을 원본에서 마지막으로 확인한 날과 출처(추정은 담당자 확인 전, 오래됨은 ${Core.STALE_DAYS}일 넘게 확인 안 함). ${SERVER ? "상태를 바꾸면 project.json에 바로 저장됩니다." : "상태를 바꾸거나 링크를 연결한 내용은 이 브라우저에만 저장됩니다. 파일에 남기려면 pm serve로 여세요."}</p>`;
+      <p class="muted" style="font-size:12px">공: 지금 다음 행동을 해야 하는 쪽. 대기: 요청한 날부터 센 날짜(7일 넘게 답이 없으면 빨간색). 막는 일정: 필요일이 지났는데 확정 전이면 빨간색. 확인: 값을 원본에서 마지막으로 확인한 날과 출처(추정은 담당자 확인 전, 오래됨은 ${Core.STALE_DAYS}일 넘게 확인 안 함). ${SERVER ? "상태를 바꾸면 project.json에 바로 저장됩니다." : "상태를 바꾸거나 링크를 연결한 내용은 이 브라우저에만 저장됩니다. 파일에 남기려면 pm serve로 여세요."}</p>`;
   }
 
   // ---------------------------------------------------------------- 요청서
@@ -1267,9 +1270,9 @@
     const kv = `<dl class="kv">
       <dt>공</dt><dd><span class="ball ${esc(item.ball)}">${esc(BALL[item.ball] || "-")}</span>${item.owner ? ` · ${esc(item.owner)}` : ""}</dd>
       <dt>리소스</dt><dd>${item.res?.url ? `<a href="${esc(item.res.url)}" target="_blank" rel="noopener">${esc(item.res.label)} ${icon("ext")}</a>` : esc(item.res?.label || "연결 안 됨")}</dd>
-      ${item.requested ? `<dt>요청일</dt><dd class="num">${F.shortDate(item.requested)}${item.waitDays != null ? ` · <span class="wait ${item.overdue ? "late" : ""}">D+${item.waitDays}</span>` : ""}</dd>` : ""}
+      ${item.requested ? `<dt>요청일</dt><dd class="num">${F.shortDate(item.requested)}${item.waitDays != null ? ` · <span class="wait ${item.noReply ? "late" : ""}">D+${item.waitDays}</span>` : ""}</dd>` : ""}
       ${item.due ? `<dt>기한</dt><dd class="num">${F.shortDate(item.due)}</dd>` : ""}
-      ${item.blocks ? `<dt>막는 일정</dt><dd>${esc(item.blocks)}${item.blocksDate ? ` (${F.shortDate(item.blocksDate)})` : ""}</dd>` : ""}
+      ${item.blocks ? `<dt>막는 일정</dt><dd>${esc(item.blocks)}${item.blocksDate ? ` (${F.shortDate(item.blocksDate)})` : ""}${item.blocksDate ? ` · ${item.needLate ? lateText(Core.needText(item, realToday())) : esc(Core.needText(item, realToday()))}` : ""}</dd>` : ""}
       ${item.status !== "not_needed" ? `<dt>최근 확인</dt><dd>${item.checkedAt ? `<span class="num">${F.shortDate(item.checkedAt)}</span>` : "기록 없음"}${item.checkedSrc ? ` · ${esc(item.checkedSrc)}` : ""}${item.guess ? ` <span class="chip warn fresh-tag">추정</span>` : item.stale ? ` <span class="chip neutral fresh-tag">오래됨</span>` : ""}</dd>` : ""}
     </dl>
     ${item.status !== "not_needed" ? `<div class="btn-row" data-internal style="margin:-4px 0 12px"><input id="ck-src" class="search" style="flex:1;min-width:0" placeholder="확인한 곳 (예: Notion 요청 페이지, 콘솔, 고객사 통화)" value="${esc(item.guess ? "" : item.checkedSrc || "")}"/><button class="btn" id="ck-save">${icon("check")}지금 확인함</button></div>` : ""}`;
@@ -1350,7 +1353,8 @@
     openDrawer({
       kicker: `<span class="muted" style="font-size:12px">${esc(cat?.name || "")}</span>`,
       title: item.title,
-      sub: `${chip(STATUS[item.status])} ${item.overdue ? `<span class="chip crit">${icon("alert")}기한 지남</span>` : ""}`,
+      // 늦음은 두 말로만: 필요일 지남, 7일 넘게 답 없음
+      sub: `${chip(STATUS[item.status])} ${item.needLate ? `<span class="chip crit">${icon("alert")}${Core.LATE.need}</span>` : ""} ${item.noReply ? `<span class="chip crit">${icon("alert")}${Core.LATE.wait}</span>` : ""}`,
       body: kv + note + internal + action + statusForm + history,
     });
 
@@ -2251,7 +2255,7 @@
             <td><div class="title">${esc(item.title)}</div><div style="margin-top:4px">${chip(STATUS[item.status])}</div></td>
             <td>${esc(item.need ? Core.fill(item.need, project) : "")}${item.blocksDate ? `<div class="note">${esc(item.blocks)}(${F.monthDay(item.blocksDate)}) 전에 필요</div>` : ""}</td>
             <td>${infoHtml(project, item)}</td>
-            <td>${item.askBy && (item.status === "missing" || item.status === "requested") ? `<div class="wait ${item.late || item.overdue ? "late" : ""}">회신 ${F.shortDate(item.askBy)}까지</div>` : ""}${item.answeredAt ? `<div class="note">답 ${F.monthDay(item.answeredAt)}</div>` : ""}${item.waitDays != null ? `<div class="note">요청 D+${item.waitDays}</div>` : ""}${item.note ? `<div class="note">${esc(item.note)}</div>` : ""}</td>
+            <td>${item.askBy && (item.status === "missing" || item.status === "requested") ? `<div class="wait ${item.late || item.noReply ? "late" : ""}">회신 ${F.shortDate(item.askBy)}까지</div>` : ""}${item.answeredAt ? `<div class="note">답 ${F.monthDay(item.answeredAt)}</div>` : ""}${item.waitDays != null ? `<div class="note">요청 D+${item.waitDays}</div>` : ""}${item.note ? `<div class="note">${esc(item.note)}</div>` : ""}</td>
           </tr>`;
         })
         .join("");
@@ -2318,7 +2322,7 @@
     openDrawer({
       kicker: '<span class="muted" style="font-size:12px">고객사 답 기록</span>',
       title: item.title,
-      sub: `${chip(STATUS[item.status])}${item.askBy ? ` <span class="wait ${item.late || item.overdue ? "late" : ""}">회신 ${F.shortDate(item.askBy)}까지</span>` : ""}`,
+      sub: `${chip(STATUS[item.status])}${item.askBy ? ` <span class="wait ${item.late || item.noReply ? "late" : ""}">회신 ${F.shortDate(item.askBy)}까지</span>` : ""}`,
       body: `${item.need ? `<div class="callout">${icon("doc")}<span>${esc(Core.fill(item.need, model.project))}</span></div>` : ""}
         ${fields || '<p class="muted">입력 칸이 없는 항목입니다. 아래에 답을 적으세요.</p>'}
         <label class="field">기타 답 (ㄴ)<textarea id="ans-note" style="min-height:80px">${esc(item.answer || "")}</textarea></label>
@@ -2450,6 +2454,7 @@
     btn.classList.toggle("running", running);
     btn.classList.toggle("failed", !running && st.state === "failed");
     btn.classList.toggle("stale", !running && st.state === "stale");
+    btn.classList.toggle("old", !running && st.state === "failed" && st.stale);
     const asks = u?.asks?.length || 0;
     $("#update-icon").innerHTML = icon(!running && (st.state === "failed" || st.state === "stale") ? "alert" : "refresh");
     // 모바일에서는 '업데이트' 낱말을 빼고 상태만 남긴다(.ul-word)
@@ -2458,7 +2463,7 @@
       : st.state === "never"
         ? null
         : st.state === "failed"
-          ? "일부 실패"
+          ? `일부 실패${st.stale ? ` · ${agoLabel(st.ageHours)}` : ""}`
           : st.state === "stale"
             ? agoLabel(st.ageHours)
             : `${whenLabel(u.at)}${asks ? ` · 답할 것 ${asks}` : ""}`;
@@ -2533,7 +2538,10 @@
                 `<div class="callout crit" style="margin-bottom:10px">${icon("alert")}<span><b>${esc(f.text)}</b><small>${f.key === "deep" ? `지금 화면의 고객사 답은 ${st.sources.client ? `${esc(whenLabel(st.sources.client))} 기준` : "아직 읽은 적이 없어요"}이에요.` : f.key === "github" ? `일정·이슈는 ${st.sources.github ? `${esc(whenLabel(st.sources.github))} 기준` : "아직 받은 적이 없어요"}이에요.` : ""}${sourceLine ? ` 기준 시각: ${esc(sourceLine)}` : ""}</small><details><summary>원문</summary>${esc(f.raw)}</details></span></div>`,
             )
             .join("")
-        : st.state === "stale"
+        : "";
+    // 실패했어도 12시간 넘게 지났으면 오래됨 안내를 함께 보인다
+    const staleNote =
+      st.stale
           ? `<div class="callout warn" style="margin-bottom:10px">${icon("alert")}<span><b>마지막 업데이트가 ${esc(agoLabel(st.ageHours))}이에요</b><small>자동 업데이트가 꺼졌거나 이 PC가 잠들어 있었을 수 있어요. ${SERVER ? "아래 ‘빠른 업데이트’로 GitHub부터 다시 받으세요." : "pm serve로 열어 업데이트하세요."}${sourceLine ? ` 기준 시각: ${esc(sourceLine)}` : ""}</small></span></div>`
           : "";
     const schedule = upd.schedule
@@ -2576,8 +2584,8 @@
     openDrawer({
       kicker: `${icon("refresh")} 업데이트`,
       title: "원본에서 다시 읽기",
-      sub: upd.running ? `<span class="chip info">${icon("clock")}업데이트 중</span>` : u ? `${st.state === "failed" ? `<span class="chip crit">${icon("alert")}일부 실패</span> ` : st.state === "stale" ? `<span class="chip warn">${icon("alert")}${esc(agoLabel(st.ageHours))}</span> ` : ""}마지막 ${esc(whenLabel(u.at))}` : "",
-      body: `<div id="update-drawer">${alert}${schedule}${action}${last}${past}</div>`,
+      sub: upd.running ? `<span class="chip info">${icon("clock")}업데이트 중</span>` : u ? `${st.state === "failed" ? `<span class="chip crit">${icon("alert")}일부 실패</span> ` : ""}${st.stale ? `<span class="chip warn">${icon("alert")}${esc(agoLabel(st.ageHours))}</span> ` : ""}마지막 ${esc(whenLabel(u.at))}` : "",
+      body: `<div id="update-drawer">${alert}${staleNote}${schedule}${action}${last}${past}</div>`,
     });
     $("#update-run")?.addEventListener("click", () => startUpdate(false));
     $("#update-deep")?.addEventListener("click", () => startUpdate(true));

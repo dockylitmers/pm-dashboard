@@ -290,8 +290,10 @@
       const label = `${lateViews.map((v) => v.title.split(" ")[0]).join(", ")}의 열린 이슈 ${lateViews.reduce((sum, v) => sum + v.open, 0)}건을 다음 스프린트로 옮길지 정리`;
       actions.push({ type: "sprint", sprint: lateViews[0].number, late: true, why: LATE.sprint, date: lateViews[0].due, dateKind: "마감", label, text: label });
     }
-    // 날짜 있는 것을 날짜 순으로(지난 것이 자연히 먼저), 같은 날이면 늦은 것 먼저, 날짜 없는 것은 뒤로
-    return actions.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || Number(b.late) - Number(a.late));
+    // 날짜 있는 것을 날짜 순으로(지난 것이 자연히 먼저), 같은 날이면 늦은 것 먼저.
+    // 날짜 없이 늦은 것(예: 막는 일정이 없는데 7일 넘게 답 없음)은 오늘 날짜로 보고, 날짜도 늦음도 없는 것만 뒤로
+    const key = (a) => a.date || (a.late ? today : "9999");
+    return actions.sort((a, b) => key(a).localeCompare(key(b)) || Number(b.late) - Number(a.late));
   }
 
   // 고객사 확인 요청 목록. 보낸 항목은 요청한 날짜(차수)별로, 아직 안 보낸 항목은 '이번에 보낼 요청'으로 묶는다
@@ -437,7 +439,9 @@
     };
     const ageHours = (now - new Date(last.at).getTime()) / 3_600_000;
     const failures = steps.filter((s) => !s.ok).map(explainStep);
-    return { state: !last.ok ? "failed" : ageHours > staleHours ? "stale" : "ok", last, ageHours, sources, failures, history };
+    // 실패해도 오래됐는지는 따로 알린다(stale)
+    const stale = ageHours > staleHours;
+    return { state: !last.ok ? "failed" : stale ? "stale" : "ok", stale, last, ageHours, sources, failures, history };
   }
 
   const escHtml = (value) =>
@@ -544,7 +548,7 @@
     const review = week.filter((a) => a.type === "review");
     if (review.length) {
       const late = review.filter((a) => a.late).length;
-      add(`받은 자료 검토·확정 <strong>${review.length}건</strong>${late ? ` — 그중 ${late}건은 <span class="late-t">필요일 지남</span>` : ""}`, { kind: "go", view: "kickoff", filter: "received", label: "검토 목록" }, { kind: "review" });
+      add(`받은 자료 검토·확정 <strong>${review.length}건</strong>${late ? ` — 그중 ${late}건은 <span class="late-t">필요일 지남</span>` : ""}`, { kind: "go", view: "kickoff", filter: "review", label: "검토 목록" }, { kind: "review" });
     }
     if (m.recheck?.length) {
       const guess = m.recheck.filter((i) => i.guess).length;
