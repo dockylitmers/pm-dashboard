@@ -28,6 +28,7 @@
 | `checklist` | 배열 | 아래 '체크리스트 항목' |
 | `contract` | 객체 | 아래 '계약' |
 | `decisions` | `[{ title, recommend, due, checked }]` | 결정이 필요한 일. 아래 '결정·위험' |
+| `resolvedDecisions` | `[{ title, recommend, due, result, decidedAt, recordedAt, src }]` | 해결된 결정(무엇으로 언제 정했는지). `pm decision done`이 옮긴다. 고객사 공유본에서 빠짐 |
 | `risks` | `[{ title, level, detail, mitigation, owner, due, checked }]` | level: `high`·`mid`·`low`. 아래 '결정·위험' |
 | `resources` | `[{ id, name, glyph, desc, url }]` | 원본 위치 |
 | `srs` | 객체 | `{ exists, location, url, summary, counts, platforms, roles, features }` |
@@ -90,7 +91,9 @@
 | `due` | 기한 `YYYY-MM-DD`. 위험은 대응을 다시 볼 날. 화면은 오늘과 비교해 'D-2', '오늘', '2일 지남'으로 보여 주고, 지난 것은 할 일·브리핑 맨 앞에 올린다 |
 | `checked` | `{ at, src, guess? }` 원본에서 마지막으로 확인한 날·출처·추정 여부(체크리스트 항목과 같은 형식) |
 
-`pm decision`·`pm risk`가 쓴다. `--due`에 '오늘'·'내일'·'모레'·'이번 주'(그 주 금요일, 주말이면 다가오는 금요일)·'다음 주'·'10/16'·'+3'을 주면 쓰는 날 기준 날짜로 바꿔 저장한다. 날짜가 아닌 옛 값(0.7 이전의 '이번 주' 같은 글자)은 화면에 글자 그대로 보이고 계산하지 않으며, `pm validate`가 경고한다. 결정이 내려지면 `pm decision done <번호>`로 목록에서 빼고 결과를 체크리스트·일정에 반영한다. 결정·위험은 고객사 공유본에서 빠진다.
+`pm decision`·`pm risk`가 쓴다. `--due`에 '오늘'·'내일'·'모레'·'이번 주'(그 주 금요일)·'다음 주'(다음 주 금요일)·'10/16'·'+3'을 주면 쓰는 날 기준 날짜로 바꿔 저장한다. 주말(토·일)에 쓰면 그 주가 끝났으므로 '이번 주'와 '다음 주' 모두 다가오는 주의 금요일이다. 달력에 없는 날짜(2026-02-30, 2026-13-45)와 값 없는 `--due`는 거부한다. 날짜가 아닌 옛 값(0.7 이전의 '이번 주' 같은 글자)과 달력에 없는 날짜는 화면에 글자 그대로 보이고 계산하지 않으며, `pm validate`가 경고한다. 결정·위험은 고객사 공유본에서 빠진다.
+
+결정이 내려지면 `pm decision done <번호> --result "무엇으로 정했는지" --date 결정한날 --src 출처`로 결정 필요 목록에서 빼고 `resolvedDecisions`에 남긴다(`recordedAt`은 기록한 날). 화면의 '결정 필요' 카드 아래 '최근 정한 것'(30일 안, 5건)과 주간 보고(내부용)의 '이번 주 정한 것'에 나온다. 결과는 체크리스트·일정에도 반영한다. 목록은 `pm decision resolved`.
 
 ```json
 { "title": "로그인 방식", "recommend": "카카오·네이버·Apple 로그인, 이메일 가입은 2차", "due": "2026-10-16", "checked": { "at": "2026-10-12", "src": "킥오프 회의" } }

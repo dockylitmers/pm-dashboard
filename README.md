@@ -466,12 +466,13 @@ pm sprint SP-05 --goal "결제·환불 흐름을 고객 화면에서 끝까지 �
 pm set srs --status received --src "고객사 메일"
 pm set domain --internal "DNS 담당자 확인 중"   # 내부 메모 (고객사 공유본에서 빠짐)
 
-# 결정·위험 (기한은 날짜로 저장: 오늘·내일·"이번 주"(그 주 금요일)·"다음 주"·10/16은 쓰는 날 기준 날짜로 바뀐다)
+# 결정·위험 (기한은 날짜로 저장: 오늘·내일·"이번 주"(그 주 금요일)·"다음 주"·10/16은 쓰는 날 기준 날짜로 바뀐다. 주말엔 둘 다 다가오는 금요일)
 pm decision                               # 결정 필요 (번호 · 기한 D-n/n일 지남 · 확인일)
 pm decision add "로그인 방식" --recommend "휴대폰 인증만" --due "이번 주" --src "주간 회의"
 pm decision set 2 --due 2026-10-20 --src "고객사 메일"
 pm decision check 1 --src "Notion 요청 페이지"
-pm decision done 1                        # 결정됨: 목록에서 뺀다
+pm decision done 1 --result "휴대폰 인증만, 소셜 로그인은 2차" --date 2026-10-12 --src "주간 회의"   # 결정됨: 해결된 결정에 남긴다
+pm decision resolved                      # 해결된 결정 (화면: 결정 필요 카드 아래 '최근 정한 것')
 pm risk add "스토어 계정 발급 지연" --level mid --owner PM --due 10/16 --mitigation "고객사 명의로 신청 요청"
 pm risk                                   # 위험 (담당·기한·확인일)
 
