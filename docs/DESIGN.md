@@ -206,6 +206,8 @@ PM ──브라우저──▶ 대시보드 ◀── pm build(파일) / pm serv
 
 `pm update --deep`은 빠른 업데이트 뒤 프로젝트마다 Claude Code를 headless로 띄운다(`claude -p --output-format json --permission-mode dontAsk --no-session-persistence`, 프롬프트는 stdin). 샘플 프로젝트는 건너뛰고, 25분이 넘으면 끊는다.
 
+지시문만 믿지 않는다. 전체 업데이트가 도는 동안에는 CLI가 지우거나 되돌리기 어려운 변경을 거절한다: `decision done`, `risk remove`, `scope` 변경, `sheet --mark-sent`, `contract` 변경, `setup-repo --apply`(GitHub 쓰기), `--out` 파일 쓰기, `init`·`setup`·`schedule`·`config` 변경, `install-cli`. 전체 업데이트의 Claude가 부르는 CLI(`PM_DEEP_UPDATE=1`)와, 같은 워크스페이스에 전체 업데이트 잠금(`.pm-update.lock`, mode deep, 프로세스가 살아 있을 때)이 있는 동안 PM이 직접 치는 명령 모두에 해당한다. PM은 몇 분 뒤 끝난 다음 다시 하면 된다. 프로세스가 없는 오래된 잠금은 무시한다. 값을 고치는 `answer`·`set`·`check`·`decision set/check`·`risk set/check`는 그대로 된다. 확인은 인자 모양이 아니라 실제로 실행될 동작 바로 앞에서 한다(`pm.mjs`의 `guardDeep`).
+
 프롬프트가 시키는 일:
 
 1. `refresh --json`과 `list --json`으로 다시 확인할 항목과 전체 항목을 본다.

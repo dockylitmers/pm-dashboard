@@ -325,6 +325,8 @@ Claude는 고객사·팀으로 나가는 글과 GitHub·Notion 쓰기를 초안�
 
 결과는 `projects/<id>/update.json`에 남는다. 어느 쪽도 원본(GitHub·Notion)에는 쓰지 않는다.
 
+전체 업데이트가 도는 동안에는 CLI가 지우거나 되돌리기 어려운 변경을 거절한다: `decision done`, `risk remove`, `scope` 변경, `sheet --mark-sent`, `contract` 변경, `setup-repo --apply`(GitHub 쓰기), `--out` 파일 쓰기, `init`·`setup`·`schedule`·`config` 변경, `install-cli`. 전체 업데이트의 Claude가 부르는 CLI(`PM_DEEP_UPDATE=1`)와, 같은 워크스페이스에 전체 업데이트 잠금(`.pm-update.lock`, mode deep, 프로세스가 살아 있을 때)이 있는 동안 PM이 직접 치는 명령 모두에 해당한다. PM은 몇 분 뒤 끝난 다음 다시 하면 된다. 프로세스가 없는 오래된 잠금은 무시한다. 값을 고치는 `answer`·`set`·`check`·`decision set/check`·`risk set/check`는 그대로 된다.
+
 전체 업데이트의 Claude가 쓸 수 있는 도구는 읽기 도구(`gh issue`·`gh pr`의 view·list, Notion fetch·search·comments, `dig`, Read·Grep·Glob)와 PM 워크스페이스의 `pm` CLI뿐이다. 나머지는 묻지 않고 거절된다(`--permission-mode dontAsk`). 워크스페이스 설정 `pm-workspace.json`의 `update`로 읽기 도구를 더하거나(`allowedTools`), 모델(`model`)과 한 번에 쓸 비용 한도(`maxBudgetUsd`)를 정할 수 있다.
 
 | 방법 | 하는 법 |

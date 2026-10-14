@@ -199,7 +199,8 @@ pm kickoff-kit --internal --save   # 계약 점검·대금·위험이 들어간 
 
 - **기한은 날짜로 저장한다.** '오늘'·'이번 주'처럼 말로 들은 기한은 그대로 적지 말고 날짜로 바꾼다. `--due`에 '오늘'·'내일'·'이번 주'(그 주 금요일)·'다음 주'·'10/16'을 주면 CLI가 쓰는 날 기준 날짜로 바꾼다. 주말에 쓴 '이번 주'·'다음 주'는 둘 다 다가오는 주의 금요일이다. 원본 글에 적힌 '오늘'은 그 글이 쓰인 날이다. 대시보드는 'D-2'·'2일 지남'으로 계산하고, 지난 결정을 할 일과 브리핑 맨 앞에 올린다.
 - 다시 확인했으면 `pm decision check <번호> --src 출처`, 기한·권장안이 바뀌면 `pm decision set <번호> --due … --src …`. 위험도 같다(`pm risk check|set`).
-- 사용자가 결정을 내리면 `pm decision done <번호> --result "무엇으로 정했는지" --date 결정한날 --src 출처`로 해결된 결정에 옮기고, 결과를 체크리스트·일정에 반영한다. 끝난 위험은 `pm risk remove <번호>`. 전체 업데이트(headless)에서는 이런 지우는 명령을 쓰지 않는다(CLI도 거절한다).
+- 사용자가 결정을 내리면 `pm decision done <번호> --result "무엇으로 정했는지" --date 결정한날 --src 출처`로 해결된 결정에 옮기고, 결과를 체크리스트·일정에 반영한다. 끝난 위험은 `pm risk remove <번호>`. `--date`는 결정한 날이라 오늘 뒤의 날짜는 받지 않는다.
+- 전체 업데이트가 도는 동안에는 CLI가 지우거나 되돌리기 어려운 변경을 거절한다: `decision done`, `risk remove`, `scope` 변경, `sheet --mark-sent`, `contract` 변경, `setup-repo --apply`(GitHub 쓰기), `--out` 파일 쓰기, `init`·`setup`·`schedule`·`config` 변경, `install-cli`. 전체 업데이트의 Claude가 부르는 CLI(`PM_DEEP_UPDATE=1`)와, 같은 워크스페이스에 전체 업데이트 잠금(`.pm-update.lock`, mode deep, 프로세스가 살아 있을 때)이 있는 동안 PM이 직접 치는 명령 모두에 해당한다. PM은 몇 분 뒤 끝난 다음 다시 하면 된다. 프로세스가 없는 오래된 잠금은 무시한다. 값을 고치는 `answer`·`set`·`check`·`decision set/check`·`risk set/check`는 그대로 된다. 전체 업데이트 중이라는 거절이 나오면 끝난 뒤 다시 실행한다.
 - 목록은 `pm decision`, `pm risk`(`--json`). `pm validate`가 날짜가 아닌 옛 기한을 경고한다.
 
 ## 대시보드

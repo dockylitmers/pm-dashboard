@@ -93,7 +93,7 @@
 
 `pm decision`·`pm risk`가 쓴다. `--due`에 '오늘'·'내일'·'모레'·'이번 주'(그 주 금요일)·'다음 주'(다음 주 금요일)·'10/16'·'+3'을 주면 쓰는 날 기준 날짜로 바꿔 저장한다. 주말(토·일)에 쓰면 그 주가 끝났으므로 '이번 주'와 '다음 주' 모두 다가오는 주의 금요일이다. 달력에 없는 날짜(2026-02-30, 2026-13-45)와 값 없는 `--due`는 거부한다. 날짜가 아닌 옛 값(0.7 이전의 '이번 주' 같은 글자)과 달력에 없는 날짜는 화면에 글자 그대로 보이고 계산하지 않으며, `pm validate`가 경고한다. 결정·위험은 고객사 공유본에서 빠진다.
 
-결정이 내려지면 `pm decision done <번호> --result "무엇으로 정했는지" --date 결정한날 --src 출처`로 결정 필요 목록에서 빼고 `resolvedDecisions`에 남긴다(`recordedAt`은 기록한 날). 화면의 '결정 필요' 카드 아래 '최근 정한 것'(30일 안, 5건)과 주간 보고(내부용)의 '이번 주 정한 것'에 나온다. 결과는 체크리스트·일정에도 반영한다. 목록은 `pm decision resolved`.
+결정이 내려지면 `pm decision done <번호> --result "무엇으로 정했는지" --date 결정한날 --src 출처`로 결정 필요 목록에서 빼고 `resolvedDecisions`에 남긴다(`recordedAt`은 기록한 날, `--date`는 오늘 뒤 날짜 불가). 화면의 '결정 필요' 카드 아래 '최근 정한 것'(30일 안, 5건)과 주간 보고(내부용)의 '이번 주 정한 것'(보고서와 같은 그 주 월~금)에 나온다. 결과는 체크리스트·일정에도 반영한다. 목록은 `pm decision resolved`. 제목·결과·결정일이 맞지 않는 항목은 화면과 목록에서 빠지고 `pm validate`가 알린다.
 
 ```json
 { "title": "로그인 방식", "recommend": "카카오·네이버·Apple 로그인, 이메일 가입은 2차", "due": "2026-10-16", "checked": { "at": "2026-10-12", "src": "킥오프 회의" } }
@@ -120,6 +120,8 @@ review.status: `unchecked`·`ok`·`risk`·`missing`·`na`. payments.status: `pla
 `pm update`(대시보드 버튼, 자동 실행 포함)가 만든다. git에 올리지 않는다. `{ last: { at, mode(quick·deep), trigger(manual·dashboard·schedule), ok, durationSec, steps: [{ key(github·recheck·deep), name, ok, detail }], recheck: { total, guess, moved, stale }, recheckItems: [{ id, title, kind, github }], summary, changed: [{ id, what }], asks: [{ id, question }], cost, error, sources: { github, client } }, history: [{ at, mode, trigger, ok, summary, error? }] }` (기록은 30개까지). `changed`·`asks`·`cost`는 전체 업데이트일 때만 채워진다.
 
 `sources`는 원본별로 마지막으로 읽기에 성공한 시각이다(`github`: GitHub 이슈, `client`: 전체 업데이트가 고객사 답(Notion)·GitHub 코멘트를 읽은 때). 한 단계가 실패하면 그 원본은 앞의 시각을 그대로 두므로, 대시보드는 'GitHub 08:30 · 고객사 답 10/13 18:34'처럼 원본마다 기준 시각을 따로 보여 준다. 0.8 이전 기록에는 없어서, 화면은 기록에서 마지막으로 성공한 전체 업데이트와 GitHub 스냅샷 시각으로 대신 계산한다.
+
+업데이트가 도는 동안 워크스페이스 맨 위에 `.pm-update.lock`(`{ pid, at, ids, trigger, mode }`)이 있다. 프로세스가 살아 있고 45분이 지나지 않았을 때만 유효하다. 전체 업데이트가 도는 동안에는 CLI가 지우거나 되돌리기 어려운 변경을 거절한다: `decision done`, `risk remove`, `scope` 변경, `sheet --mark-sent`, `contract` 변경, `setup-repo --apply`(GitHub 쓰기), `--out` 파일 쓰기, `init`·`setup`·`schedule`·`config` 변경, `install-cli`. 전체 업데이트의 Claude가 부르는 CLI(`PM_DEEP_UPDATE=1`)와, 같은 워크스페이스에 전체 업데이트 잠금(`.pm-update.lock`, mode deep, 프로세스가 살아 있을 때)이 있는 동안 PM이 직접 치는 명령 모두에 해당한다. PM은 몇 분 뒤 끝난 다음 다시 하면 된다. 프로세스가 없는 오래된 잠금은 무시한다. 값을 고치는 `answer`·`set`·`check`·`decision set/check`·`risk set/check`는 그대로 된다.
 
 `pm-workspace.json`의 설정: `schedule`(`{ times, deep, serve, installedAt }`, 자동 실행), `update`(`{ allowedTools, model, maxBudgetUsd }`, 전체 업데이트에 더할 읽기 도구·모델·비용 한도, 모두 선택).
 
