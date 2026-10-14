@@ -103,6 +103,7 @@
       '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     plug: '<path d="M9 2v6M15 2v6"/><path d="M6 8h12v4a6 6 0 0 1-12 0z"/><path d="M12 18v4"/>',
     refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/>',
+    more: '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
   };
   const icon = (name, extra = "") =>
     `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" ${extra}>${ICONS[name] || ""}</svg>`;
@@ -651,7 +652,8 @@
       gate && {
         k: `${gate.label} 전 확정`,
         v: `${gate.ready}/${gate.total}`,
-        d: gateOpen.length ? [by("received") && `받음(우리 검토) ${by("received")}`, by("requested") && `답 대기 ${by("requested")}`, by("missing") && `없음 ${by("missing")}`].filter(Boolean).join(" · ") : "모두 확정",
+        d: gateOpen.length ? [by("received") && `우리 검토 ${by("received")}`, by("requested") && `답 대기 ${by("requested")}`, by("missing") && `없음 ${by("missing")}`].filter(Boolean).join(" · ") : "모두 확정",
+        title: "확정 전인 항목을 다음 행동이 누구 쪽인지로 나눴어요: 우리 검토(받은 자료를 우리가 확정), 답 대기(고객사 답을 기다림), 없음(아직 요청 전)",
         late: gateLate ? `${Core.LATE.need} ${gateLate}건` : "",
       },
       { k: "고객사 답 기다림", v: `${waiting.length}건`, d: noReply ? "" : waiting.length ? `모두 ${Core.WAIT_LIMIT_DAYS}일 안` : "기다리는 것 없음", late: noReply ? `${Core.LATE.wait} ${noReply}건` : "" },
@@ -854,6 +856,14 @@
 
   const WBS_DAY_PX = 6;
   const WBS_FIXED_PX = 48 + 124 + 160 + 106 + 50 + 108 + 84;
+  // 홈 전체 일정도 좁은 화면에서는 오늘이 보이게 가로 스크롤을 옮긴다(오늘을 왼쪽에서 35% 자리에)
+  function scrollTimelineToToday() {
+    const sc = $(".timeline-scroll");
+    const line = sc?.querySelector(".tl-today");
+    if (!sc || !line || sc.scrollWidth <= sc.clientWidth) return;
+    const x = line.getBoundingClientRect().left - sc.getBoundingClientRect().left + sc.scrollLeft;
+    sc.scrollLeft = Math.max(0, x - sc.clientWidth * 0.35);
+  }
   // 처음 열 때 오늘이 보이도록 가로 스크롤을 옮긴다
   function scrollWbsToToday() {
     const sc = $(".wbs-scroll");
@@ -2442,15 +2452,17 @@
     btn.classList.toggle("stale", !running && st.state === "stale");
     const asks = u?.asks?.length || 0;
     $("#update-icon").innerHTML = icon(!running && (st.state === "failed" || st.state === "stale") ? "alert" : "refresh");
-    $("#update-label").textContent = running
-      ? "업데이트 중…"
+    // 모바일에서는 '업데이트' 낱말을 빼고 상태만 남긴다(.ul-word)
+    const tail = running
+      ? null
       : st.state === "never"
-        ? "업데이트"
+        ? null
         : st.state === "failed"
-          ? "업데이트 일부 실패"
+          ? "일부 실패"
           : st.state === "stale"
-            ? `업데이트 ${agoLabel(st.ageHours)}`
-            : `업데이트 ${whenLabel(u.at)}${asks ? ` · 답할 것 ${asks}` : ""}`;
+            ? agoLabel(st.ageHours)
+            : `${whenLabel(u.at)}${asks ? ` · 답할 것 ${asks}` : ""}`;
+    $("#update-label").innerHTML = running ? "업데이트 중…" : tail ? `<span class="ul-word">업데이트 </span>${esc(tail)}` : "업데이트";
     const sources = [st.sources.github && `GitHub ${whenLabel(st.sources.github)}`, st.sources.client && `고객사 답 ${whenLabel(st.sources.client)}`].filter(Boolean).join(" · ");
     btn.title = running
       ? "원본을 다시 읽는 중"
@@ -2585,6 +2597,11 @@
     const q = model.queue.length;
     $("#queue-count").textContent = q;
     $("#queue-count").classList.toggle("zero", q === 0);
+    // 모바일 더보기 버튼에도 승인 대기 수를 보인다
+    $("#more-count").textContent = q;
+    $("#more-count").hidden = q === 0 || CLIENT;
+    $("#project-name").textContent = project.name;
+    $("#nav-issues").title = "열린 이슈 전체";
     $("#nav-kickoff").textContent = model.missing.length
       ? `${model.missing.length}`
       : "";
@@ -2615,6 +2632,7 @@
       mountScheduleCharts(model);
       scrollWbsToToday();
     }
+    if (state.view === "overview") scrollTimelineToToday();
     hydrateIcons(content);
     updateChrome();
     store.project = state.projectId;
@@ -2804,11 +2822,96 @@
       paintUpdateButton();
       if (data?.running) watchUpdate();
     });
-  $("#project-select").addEventListener("change", (event) => {
-    state.projectId = event.target.value;
+  // ---------------------------------------------------------------- 프로젝트 고르기 (상태·출시 D-day가 붙은 목록)
+  function switchProject(id) {
+    if (!PROJECTS[id] || id === state.projectId) return;
+    state.projectId = id;
     state.kickoff = { status: "all", category: "all", q: "" };
     state.scenario = { velocityPct: 0, inflowPct: 0, descope: 0 };
     render();
+  }
+  function projectOptionsHtml() {
+    return projectIds
+      .map((id) => {
+        const p = PROJECTS[id];
+        const m = getModel(id);
+        const launch = p.dates?.launch;
+        const days = launch ? F.daysBetween(realToday(), launch) : null;
+        return `<li role="option" id="pj-${esc(id)}" data-project="${esc(id)}" aria-selected="${id === state.projectId}" tabindex="-1"><b>${esc(p.name)}${p.sample ? " (샘플)" : ""}</b><small>${esc(p.client || "")}${p.kind ? ` · ${esc(p.kind)}` : ""}</small><span class="pj-state">${CLIENT ? "" : chip(m.health)}<span class="num">${launch ? `출시 ${F.monthDay(launch)} · ${days >= 0 ? `D-${days}` : `${-days}일 지남`}` : "출시일 미정"}</span></span></li>`;
+      })
+      .join("");
+  }
+  const projectList = $("#project-list");
+  const projectBtn = $("#project-btn");
+  function openProjectList() {
+    projectList.innerHTML = projectOptionsHtml();
+    hydrateIcons(projectList);
+    projectList.hidden = false;
+    projectBtn.setAttribute("aria-expanded", "true");
+    const current = projectList.querySelector('[aria-selected="true"]') || projectList.firstElementChild;
+    current?.focus();
+  }
+  function closeProjectList(focusButton = true) {
+    if (projectList.hidden) return;
+    projectList.hidden = true;
+    projectBtn.setAttribute("aria-expanded", "false");
+    if (focusButton) projectBtn.focus();
+  }
+  projectBtn.addEventListener("click", () => (projectList.hidden ? openProjectList() : closeProjectList()));
+  projectBtn.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      openProjectList();
+    }
+  });
+  projectList.addEventListener("click", (event) => {
+    const li = event.target.closest("[data-project]");
+    if (!li) return;
+    closeProjectList();
+    switchProject(li.dataset.project);
+  });
+  projectList.addEventListener("keydown", (event) => {
+    const items = [...projectList.querySelectorAll("[data-project]")];
+    const i = items.indexOf(document.activeElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      items[(i + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      (event.key === "Home" ? items[0] : items.at(-1))?.focus();
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      const id = document.activeElement?.dataset?.project;
+      closeProjectList();
+      if (id) switchProject(id);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeProjectList();
+    } else if (event.key === "Tab") closeProjectList(false);
+  });
+
+  // ---------------------------------------------------------------- 모바일 더보기 메뉴 (승인 대기·공유 보기·테마)
+  const moreBtn = $("#more-btn");
+  const moreMenu = $("#topbar-more");
+  function setMore(open) {
+    moreMenu.classList.toggle("open", open);
+    moreBtn.setAttribute("aria-expanded", String(open));
+    if (open) moreMenu.querySelector("button:not([hidden])")?.focus();
+  }
+  moreBtn.addEventListener("click", () => setMore(!moreMenu.classList.contains("open")));
+  moreMenu.addEventListener("click", (event) => {
+    if (event.target.closest("button") && moreMenu.classList.contains("open")) setMore(false);
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".project-switch")) closeProjectList(false);
+    if (!event.target.closest("#topbar-more, #more-btn") && moreMenu.classList.contains("open")) setMore(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && moreMenu.classList.contains("open")) {
+      setMore(false);
+      moreBtn.focus();
+    }
   });
   $("#client-view-btn").addEventListener("click", (event) => {
     const on = !document.body.classList.contains("client-view");
@@ -2833,10 +2936,7 @@
   window.addEventListener("hashchange", () => {
     const [, hp, hv] = location.hash.match(/^#\/([^/]+)\/([^/]+)/) || [];
     if ((PROJECTS[hp] && hp !== state.projectId) || (VIEWS[hv] && hv !== state.view)) {
-      if (PROJECTS[hp]) {
-        state.projectId = hp;
-        $("#project-select").value = hp;
-      }
+      if (PROJECTS[hp]) state.projectId = hp;
       navigate(VIEWS[hv] ? hv : state.view);
     }
   });
@@ -2859,13 +2959,6 @@
     location.hash.match(/^#\/([^/]+)\/([^/]+)/) || [];
   if (PROJECTS[hashProject]) state.projectId = hashProject;
   if (VIEWS[hashView]) state.view = hashView;
-  $("#project-select").innerHTML = projectIds
-    .map(
-      (id) =>
-        `<option value="${esc(id)}">${esc(PROJECTS[id].name)}${PROJECTS[id].sample ? " (샘플)" : ""}</option>`,
-    )
-    .join("");
-  $("#project-select").value = state.projectId;
   hydrateIcons(document);
 
   window.PMApp = {

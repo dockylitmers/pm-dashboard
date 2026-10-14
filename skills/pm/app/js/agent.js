@@ -66,8 +66,10 @@
       progress,
       thinking: busy,
     });
-    const signals = model.health.reasons.length;
+    const signals = model.health.signals?.length ?? model.health.reasons.length;
+    // 살펴볼 신호 수는 상태 칩 옆 이유 칩과 같은 목록(health.signals)
     els.fabBubble.innerHTML = `리미<small>${esc(model.health.label)}${signals ? ` · 살펴볼 신호 ${signals}개` : ""} · 눌러서 브리핑</small>`;
+    els.fab.setAttribute("aria-label", `리미와 대화하기 · ${model.health.label}${signals ? ` · 살펴볼 신호 ${signals}개` : ""}`);
     els.fabDot.hidden = !(
       model.waiting.some((item) => item.overdue) || model.health.level >= 2
     );
@@ -1145,6 +1147,14 @@
   }
 
   // ---------------------------------------------------------------- 이벤트
+  // 말풍선은 처음 들어왔을 때만 보이고, 스크롤하면 아바타만 남겨 오른쪽 아래 숫자를 가리지 않는다
+  const compactFab = () => {
+    if (window.scrollY > 40) {
+      els.fab.classList.add("compact");
+      window.removeEventListener("scroll", compactFab);
+    }
+  };
+  window.addEventListener("scroll", compactFab, { passive: true });
   els.fab.addEventListener("click", open);
   $("#chat-close").addEventListener("click", close);
   els.form.addEventListener("submit", (event) => {
