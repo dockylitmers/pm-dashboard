@@ -20,6 +20,32 @@ import { locate, registered, setup, Workspace } from "./lib/workspace.mjs";
 const commands = {};
 const ws = (args) => Workspace.open(args);
 
+// ---------------------------------------------------------------- 전체 업데이트 중 막는 변경
+// 전체 업데이트(headless Claude)가 도는 동안에는 지우거나 되돌리기 어려운 변경(결정 해결 처리, 위험 지우기, 범위 바꾸기,
+// '보냄' 표시, 계약 바꾸기, GitHub 쓰기, --out 파일 쓰기, 설정·자동 실행 바꾸기)을 막는다. 두 가지로 안다:
+// - 그 Claude가 부르는 CLI에 붙는 PM_DEEP_UPDATE=1
+// - 워크스페이스의 .pm-update.lock이 전체 업데이트(mode deep)이고 그 프로세스가 살아 있을 때(오래된 잠금은 무시)
+// 인자 모양이 아니라 실제로 실행될 동작 바로 앞에서 확인한다(guardDeep을 그 자리에서 부른다)
+function deepLock(w, args) {
+  try {
+    const target = w || (() => {
+      const found = locate(args || {});
+      return found ? new Workspace(found.dir, found.source) : null;
+    })();
+    const lock = target ? runningUpdate(target) : null;
+    return lock && lock.mode === "deep" ? lock : null;
+  } catch {
+    return null;
+  }
+}
+function guardDeep(what, { w = null, args = null } = {}) {
+  if (process.env.PM_DEEP_UPDATE === "1")
+    throw new UsageError(`전체 업데이트 중에는 ${what}을(를) 할 수 없습니다(지우거나 되돌리기 어려운 변경). 전체 업데이트 안이라면 asks로 PM에게 물으세요.`);
+  const lock = deepLock(w, args);
+  if (lock)
+    throw new UsageError(`전체 업데이트 중이라(${localTime(lock.at)} 시작) 지금은 ${what}을(를) 할 수 없습니다. 끝난 뒤 다시 하세요(보통 몇 분, 상태는 pm schedule).`);
+}
+
 const target = (args) => {
   const w = ws(args);
   return { w, id: w.resolveId(args, gitRemoteRepo()) };
@@ -113,6 +139,7 @@ D는 YYYY-MM-DD. --project를 빼면 지금 폴더의 git 저장소와 연결된
 
 commands.setup = (args) => {
   const dir = path.resolve(args._[0] || process.cwd());
+  guardDeep("워크스페이스 세팅(pm setup)", { w: new Workspace(dir, "setup"), args });
   const importFrom = typeof args.import === "string" ? args.import.replace(/^~(?=\/|$)/, os.homedir()) : null;
   const result = setup(dir, { company: typeof args.company === "string" ? args.company : undefined, importFrom });
   console.log(`${result.existed ? "워크스페이스를 갱신했습니다" : "워크스페이스를 만들었습니다"}: ${dir}`);
@@ -154,11 +181,13 @@ commands.config = (args) => {
   const [key, value] = args._;
   if (!key) return console.log(JSON.stringify(w.config, null, 2));
   if (value === undefined) return console.log(w.config[key] ?? "");
+  guardDeep("설정 바꾸기(pm config)", { w });
   w.setConfig({ [key]: value });
   console.log(`${key} = ${value}`);
 };
 
-commands["install-cli"] = () => {
+commands["install-cli"] = (args) => {
+  guardDeep("pm 명령 설치(pm install-cli)", { args });
   const bin = process.env.PM_BIN_DIR || path.join(os.homedir(), ".local", "bin");
   fs.mkdirSync(bin, { recursive: true });
   // 플러그인은 버전마다 폴더가 바뀌므로, 실행할 때 가장 새 버전을 찾는다
@@ -178,6 +207,7 @@ commands.init = (args) => {
   const w = ws(args);
   const [id] = args._;
   if (!id || !ID_RE.test(id)) throw new UsageError("pm init <id> — id는 영문 소문자·숫자·하이픈 (예: my-app)");
+  guardDeep("새 프로젝트 만들기(pm init)", { w });
   if (fs.existsSync(w.projectFile(id)) && !args.force) throw new UsageError(`${w.projectFile(id)}가 이미 있습니다. 덮어쓰려면 --force`);
   const dateFlags = { kickoff: "kickoff", devStart: "dev-start", devEnd: "dev-end", qaStart: "qa-start", qaEnd: "qa-end", launch: "launch", storeSubmit: "store-submit" };
   const dates = {};
@@ -211,6 +241,7 @@ commands.scope = (args) => {
   features.push(...list(args.add));
   features = features.filter((key) => !list(args.remove).includes(key));
   if (args.set !== undefined || args.add !== undefined || args.remove !== undefined) {
+    guardDeep("개발 범위 바꾸기(pm scope)", { w });
     const diff = applyScope(project, features);
     w.save(id, project);
     if (diff.added.length) console.log(`추가: ${diff.added.join(", ")}`);
@@ -402,6 +433,7 @@ commands["setup-repo"] = async (args) => {
   const project = w.load(id);
   const repo = project.github?.repo;
   if (!repo) throw new UsageError("project.json에 github.repo가 없습니다");
+  if (args.apply) guardDeep("GitHub에 라벨·마일스톤 만들기(pm setup-repo --apply)", { w });
   const plan = await setupRepo(repo, Core.anchorDates(project.dates), { apply: !!args.apply });
   console.log(`${repo} — 이미 있는 라벨 ${plan.existing.labels}개, 마일스톤 ${plan.existing.milestones}개`);
   console.log(plan.labels.length ? `${args.apply ? "만든" : "만들"} 라벨: ${plan.labels.map((l) => l.name).join(", ")}` : "라벨: 모두 있음");
@@ -427,6 +459,7 @@ commands["setup-repo"] = async (args) => {
 // ---------------------------------------------------------------- 문서
 
 function emit(args, w, id, name, text) {
+  if (args.out !== undefined) guardDeep("--out으로 파일 쓰기", { w });
   if (args.save) console.error(`저장: ${w.saveDoc(id, `${name}-${today()}.md`, text)}`);
   if (typeof args.out === "string") {
     fs.writeFileSync(path.resolve(args.out), text);
@@ -438,6 +471,7 @@ function emit(args, w, id, name, text) {
 commands.sheet = (args) => {
   const { w, id } = target(args);
   if (args["mark-sent"]) {
+    guardDeep("'보냄' 표시(pm sheet --mark-sent)", { w });
     const project = w.load(id);
     const date = args.date ? parseDate(args.date, "date") : today();
     const sent = markSent(project, date);
@@ -661,6 +695,7 @@ const localTime = (iso) => {
 
 commands.update = async (args) => {
   const w = ws(args);
+  if (process.env.PM_DEEP_UPDATE === "1") throw new UsageError("전체 업데이트 중에는 pm update를 다시 부를 수 없습니다.");
   const ids = args.all || !w.ids().length ? w.ids() : [w.resolveId(args, gitRemoteRepo())];
   if (!ids.length) throw new UsageError("등록된 프로젝트가 없습니다. pm init <id>로 만드세요.");
   const trigger = ["schedule", "dashboard", "manual"].includes(args.trigger) ? args.trigger : "manual";
@@ -700,6 +735,7 @@ commands.doctor = (args) => {
 commands.schedule = (args) => {
   const w = ws(args);
   const [sub = "status"] = args._;
+  if (sub === "install" || sub === "remove") guardDeep(`자동 실행 바꾸기(pm schedule ${sub})`, { w });
   if (sub === "install") {
     const times = list(args.times || "08:30,12:30,18:30");
     let deep = !!args.deep;
@@ -741,6 +777,7 @@ commands.sprint = (args) => {
   const [code] = args._;
   if (code && typeof args.goal === "string") {
     const project = w.load(id);
+    if (!args.goal.trim()) guardDeep("스프린트 목표 지우기", { w });
     project.sprints = { ...(project.sprints || {}) };
     if (args.goal.trim()) project.sprints[code] = { ...(project.sprints[code] || {}), goal: args.goal.trim(), updated: today() };
     else delete project.sprints[code];
@@ -848,6 +885,7 @@ function rowsCommand(args, kind) {
   }
   // 결정됨: 결정 필요 목록에서 빼고, 무엇으로 정했는지(결과)와 날짜를 해결된 결정(resolvedDecisions)에 남긴다
   if (kind === "decision" && sub === "done") {
+    guardDeep("결정 해결 처리(pm decision done)", { w });
     const [index] = pickRows(rows, rest.slice(0, 1), what);
     const result = [args.result, args.note].find((v) => typeof v === "string" && v.trim());
     if (!result) throw new UsageError('무엇으로 정했는지 --result로 적으세요 (예: pm decision done 1 --result "웹 결제로 출시, 앱 결제는 2차" --date 2026-10-12 --src "주간 회의")');
@@ -859,6 +897,7 @@ function rowsCommand(args, kind) {
     return console.log(`결정됨으로 옮겼습니다: ${done.title} — ${done.result} (${F.shortDate(decidedAt)} 결정)\n결정 내용은 체크리스트·일정에도 반영하세요 (pm set, project.json).`);
   }
   if (kind === "risk" && sub === "remove") {
+    guardDeep("위험 지우기(pm risk remove)", { w });
     const [index] = pickRows(rows, rest.slice(0, 1), what);
     const [row] = rows.splice(index, 1);
     w.save(id, project);
@@ -886,6 +925,7 @@ commands.contract = (args) => {
   const project = w.load(id);
   if (!project.contract) project.contract = { signedAt: null, review: [], payments: [] };
   const [sub, key] = args._;
+  if (sub) guardDeep(`계약 점검·대금 바꾸기(pm contract ${sub})`, { w });
   if (sub === "check") {
     const row = project.contract.review.find((r) => r.id === key);
     if (!row) throw new UsageError(`계약 점검 항목 ${key}가 없습니다: ${project.contract.review.map((r) => r.id).join(", ")}`);
@@ -931,6 +971,7 @@ commands.build = (args) => {
   const client = !!args.client;
   const ids = typeof args.project === "string" || client ? [w.resolveId(args, gitRemoteRepo())] : w.ids();
   if (!ids.length) throw new UsageError("등록된 프로젝트가 없습니다. pm init <id>로 만드세요.");
+  if (args.out !== undefined) guardDeep("--out으로 파일 쓰기", { w });
   const out =
     typeof args.out === "string"
       ? path.resolve(args.out)
@@ -945,20 +986,6 @@ commands.serve = (args) => serve(ws(args), { port: Number(args.port) || 4477, op
 
 // ---------------------------------------------------------------- 실행
 
-// 전체 업데이트(headless Claude)가 부르는 CLI는 지우거나 되돌리기 어려운 명령을 쓸 수 없다(PM_DEEP_UPDATE=1).
-// 지시문으로도 막지만, 지시를 어겨도 데이터가 지워지지 않게 CLI에서 한 번 더 막는다
-function deepBlocked(name, args) {
-  const [sub] = args._;
-  if (["init", "setup", "install-cli", "update", "serve", "schedule", "scope"].includes(name) && !(name === "schedule" && (!sub || sub === "status")) && !(name === "scope" && args.set === undefined && args.add === undefined && args.remove === undefined)) return true;
-  if ((name === "decision" || name === "decisions") && sub === "done") return true;
-  if ((name === "risk" || name === "risks") && (sub === "remove" || sub === "done")) return true;
-  if (name === "config" && args._.length > 1) return true;
-  if (name === "contract" && sub) return true;
-  if (name === "sheet" && args["mark-sent"]) return true;
-  if (name === "sprint" && typeof args.goal === "string" && !args.goal.trim()) return true;
-  return false;
-}
-
 const [name = "help", ...rest] = process.argv.slice(2);
 const command = commands[name];
 if (!command) {
@@ -967,10 +994,7 @@ if (!command) {
   process.exit(2);
 }
 try {
-  const parsed = parseArgs(rest);
-  if (process.env.PM_DEEP_UPDATE === "1" && deepBlocked(name, parsed))
-    throw new UsageError(`전체 업데이트 중에는 'pm ${[name, ...parsed._].join(" ")}'을(를) 쓸 수 없습니다(지우거나 되돌리기 어려운 변경). 필요하면 asks로 PM에게 물으세요.`);
-  await command(parsed);
+  await command(parseArgs(rest));
 } catch (error) {
   console.error(error instanceof UsageError ? error.message : error.stack || String(error));
   process.exit(1);

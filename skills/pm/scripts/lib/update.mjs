@@ -233,7 +233,7 @@ ${[...new Set(sources)].map((s) => `- ${s}`).join("\n") || "- (등록된 원본 
    - 결정 필요·위험은 \`decision\`·\`risk\`의 \`set\`·\`check\`로만 고친다(번호는 \`decision --json\`의 n). 기한은 날짜(YYYY-MM-DD)로 쓴다. '오늘'·'이번 주'처럼 원본에 적힌 말은 그 글이 쓰인 날 기준 날짜로 바꿔 \`--due\`에 넣는다. 그대로면 \`decision check <번호> --src "<출처>"\`, 기한·권장안이 바뀌었으면 \`decision set <번호> --due YYYY-MM-DD --src "<출처>"\`. 원본에서 이미 결정됐거나 끝난 위험으로 보이면 지우지 말고 asks에 "○○로 결정됐나요?"를 넣는다.
 4. 지킬 것
    - GitHub·Notion·메일 등 원본에는 아무것도 쓰지 않는다. 허용되지 않은 도구는 쓰지 않는다.
-   - 지우거나 되돌리기 어려운 명령은 쓰지 않는다: \`decision done\`, \`risk remove\`, \`scope\` 변경, \`sheet --mark-sent\`, \`contract\` 변경, \`init\`·\`setup\`·\`schedule\`·\`config\` 변경. 필요해 보이면 asks에 묻는다(이 실행에서는 CLI도 거절한다).
+   - 지우거나 되돌리기 어려운 명령은 쓰지 않는다: \`decision done\`, \`risk remove\`, \`scope\` 변경, \`sheet --mark-sent\`, \`contract\` 변경, \`setup-repo --apply\`(GitHub 쓰기), \`--out\`(파일 쓰기), \`init\`·\`setup\`·\`schedule\`·\`config\` 변경. 필요해 보이면 asks에 묻는다(이 실행에서는 CLI도 거절한다).
    - 비밀번호, API 키, 토큰, 개인 전화번호·이메일은 기록하지 않는다. 원본에 있으면 "받음(원본에 있음)"으로만 쓴다.
    - note·fields·need·proposal은 고객사도 보는 글이다. 결론만 쉬운 말로 쓰고 이슈 번호·사람 이름·코드 용어는 internal에만 쓴다.
    - 근거가 약하면 바꾸지 않는다. 확정(confirmed)은 원본에 확정 근거가 있을 때만.
