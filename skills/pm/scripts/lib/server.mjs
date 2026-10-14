@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { BALLS, Core, DATE_RE, openFile, today, UsageError } from "./common.mjs";
+import { BALLS, Core, isDate, openFile, today, UsageError } from "./common.mjs";
 import { dashboardHtml } from "./build.mjs";
 import { scheduleStatus } from "./schedule.mjs";
 import { claudeBin, logDir, PM_SCRIPT, readUpdate, runningUpdate } from "./update.mjs";
@@ -136,7 +136,7 @@ export function serve(ws, { port = 4477, open = false } = {}) {
       }
       if (kind === "sheet" && req.method === "POST" && a === "sent") {
         const { date = today(), ids = null } = await readBody(req);
-        if (!DATE_RE.test(date)) return send(res, 400, { error: "date" });
+        if (!isDate(date)) return send(res, 400, { error: "date" });
         const sent = markSent(project, date, ids);
         save();
         return send(res, 200, { ok: true, sent });
@@ -159,7 +159,7 @@ export function serve(ws, { port = 4477, open = false } = {}) {
         if (!payment) return send(res, 404, { error: "payment" });
         if (status && !Core.PAYMENT_STATUS[status]) return send(res, 400, { error: "status" });
         if (status) payment.status = status;
-        if (status === "paid") payment.paidAt = date && DATE_RE.test(date) ? date : today();
+        if (status === "paid") payment.paidAt = date && isDate(date) ? date : today();
         save();
         return send(res, 200, { ok: true });
       }

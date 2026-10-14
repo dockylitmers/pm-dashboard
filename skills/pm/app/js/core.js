@@ -59,7 +59,12 @@
 
   const rank = (status) => STATUS[status]?.order ?? 0;
   const atLeast = (status, target) => status !== "not_needed" && rank(status) >= rank(target);
-  const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "");
+  // YYYY-MM-DD 모양이면서 달력에 있는 날짜(2026-02-30, 2026-13-45는 아님)
+  const isDate = (value) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
+    const d = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+  };
   const RISK_LEVEL = { high: "높음", mid: "중간", low: "낮음" };
 
   // 날짜와 오늘의 차이: 'D-2', '오늘', '2일 지남'

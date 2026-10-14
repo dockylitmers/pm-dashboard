@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { BALLS, Core, DATE_RE, Docs, F, fmt, gitRemoteRepo, ID_RE, list, openFile, pad, parseArgs, parseDate, parseDue, SKILL_DIR, today, UsageError } from "./lib/common.mjs";
+import { BALLS, Core, DATE_RE, Docs, F, fmt, gitRemoteRepo, ID_RE, isDate, list, openFile, pad, parseArgs, parseDate, parseDue, SKILL_DIR, today, UsageError } from "./lib/common.mjs";
 import { dashboardHtml } from "./lib/build.mjs";
 import { setupRepo, sync } from "./lib/github.mjs";
 import { applyScope, library, newProject } from "./lib/library.mjs";
@@ -80,7 +80,8 @@ commands.help = () => {
   set <item> [--status s] [--ball b] [--requested today|D] [--due D] [--res-label t] [--res-url u] [--log 기록]
              [--src 출처] [--guess] [--note 결론] [--internal 내부 메모]
 
-결정·위험 (기한은 날짜로 저장: YYYY-MM-DD, 10/16, 오늘, 내일, "이번 주"=그 주 금요일, "다음 주"는 쓰는 날 기준으로 바꾼다)
+결정·위험 (기한은 날짜로 저장: YYYY-MM-DD, 10/16, 오늘, 내일, "이번 주"=그 주 금요일, "다음 주"는 쓰는 날 기준으로 바꾼다.
+          주말에 쓰면 "이번 주"·"다음 주" 모두 다가오는 주의 금요일)
   decision [--json]               결정 필요 목록 (번호 · 기한 D-n/n일 지남 · 확인일)
   decision add "제목" --recommend 권장안 --due 기한 [--src 출처] [--guess]
   decision set <번호> [--title t] [--recommend r] [--due 기한 | --no-due] [--src 출처] [--guess]
@@ -228,7 +229,7 @@ commands.validate = (args) => {
     const p = w.load(id);
     const issues = [];
     if (p.id !== id) issues.push(`id가 폴더 이름(${id})과 다름: ${p.id}`);
-    for (const [key, value] of Object.entries(p.dates || {})) if (value && !DATE_RE.test(value)) issues.push(`dates.${key} 형식: ${value}`);
+    for (const [key, value] of Object.entries(p.dates || {})) if (value && !isDate(value)) issues.push(`dates.${key} ${DATE_RE.test(value) ? "없는 날짜" : "형식"}: ${value}`);
     const catIds = new Set((p.categories || []).map((c) => c.id));
     const seen = new Set();
     for (const item of p.checklist || []) {
@@ -239,28 +240,33 @@ commands.validate = (args) => {
       if (!Core.STATUS[item.status]) issues.push(`${where}: status '${item.status}' (가능: ${Object.keys(Core.STATUS).join(", ")})`);
       if (!BALLS.includes(item.ball)) issues.push(`${where}: ball '${item.ball}' (가능: ${BALLS.join(", ")})`);
       if (!catIds.has(item.cat)) issues.push(`${where}: categories에 없는 cat '${item.cat}'`);
-      for (const field of ["requested", "due", "updated", "blocksDate", "answeredAt"]) if (item[field] && !DATE_RE.test(item[field])) issues.push(`${where}.${field} 형식: ${item[field]}`);
+      for (const field of ["requested", "due", "updated", "blocksDate", "answeredAt"]) if (item[field] && !isDate(item[field])) issues.push(`${where}.${field} ${DATE_RE.test(item[field]) ? "없는 날짜" : "형식"}: ${item[field]}`);
       if (item.needBy && !Core.ANCHORS[item.needBy]) issues.push(`${where}.needBy '${item.needBy}' (가능: ${Object.keys(Core.ANCHORS).join(", ")})`);
-      if (item.checked && (!DATE_RE.test(item.checked.at || "") || typeof item.checked.src !== "string")) issues.push(`${where}.checked 형식: { at: YYYY-MM-DD, src: 출처, guess?: true }`);
+      if (item.checked && (!isDate(item.checked.at) || typeof item.checked.src !== "string")) issues.push(`${where}.checked 형식: { at: YYYY-MM-DD, src: 출처, guess?: true }`);
       if (item.status === "requested" && !item.requested) issues.push(`${where}: 요청함인데 requested 날짜가 없음(대기 일수를 못 셈)`);
     }
     for (const r of p.contract?.review || []) if (!Core.CONTRACT_REVIEW[r.status || "unchecked"]) issues.push(`contract.review.${r.id}: status '${r.status}'`);
     // 결정·위험: 기한은 날짜여야 화면이 'D-n'·'n일 지남'을 계산한다. 옛 글자 기한은 오류가 아니라 경고로 알린다
     const warnings = [];
     const checkMark = (where, checked) => {
-      if (checked && (!DATE_RE.test(checked.at || "") || typeof checked.src !== "string")) issues.push(`${where}.checked 형식: { at: YYYY-MM-DD, src: 출처, guess?: true }`);
+      if (checked && (!isDate(checked.at) || typeof checked.src !== "string")) issues.push(`${where}.checked 형식: { at: YYYY-MM-DD, src: 출처, guess?: true }`);
     };
     (p.decisions || []).forEach((d, i) => {
       const where = `decisions[${i + 1}] '${d.title || "?"}'`;
       if (!d.title) issues.push(`decisions[${i + 1}]: title 없음`);
-      if (d.due && !DATE_RE.test(d.due)) warnings.push(`${where}: 기한이 날짜가 아님('${d.due}') — pm decision set ${i + 1} --due YYYY-MM-DD`);
+      if (d.due && !isDate(d.due)) warnings.push(`${where}: 기한이 ${DATE_RE.test(d.due) ? "없는 날짜" : "날짜가 아님"}('${d.due}') — pm decision set ${i + 1} --due YYYY-MM-DD`);
       checkMark(`decisions[${i + 1}]`, d.checked);
+    });
+    (p.resolvedDecisions || []).forEach((d, i) => {
+      const where = `resolvedDecisions[${i + 1}] '${d.title || "?"}'`;
+      if (!d.title || !d.result) issues.push(`${where}: title과 result(무엇으로 정했는지)가 있어야 함`);
+      if (!isDate(d.decidedAt)) issues.push(`${where}.decidedAt 형식: ${d.decidedAt}`);
     });
     (p.risks || []).forEach((r, i) => {
       const where = `risks[${i + 1}] '${r.title || "?"}'`;
       if (!r.title) issues.push(`risks[${i + 1}]: title 없음`);
       if (r.level && !Core.RISK_LEVEL[r.level]) issues.push(`${where}: level '${r.level}' (가능: ${Object.keys(Core.RISK_LEVEL).join(", ")})`);
-      if (r.due && !DATE_RE.test(r.due)) warnings.push(`${where}: 기한이 날짜가 아님('${r.due}') — pm risk set ${i + 1} --due YYYY-MM-DD`);
+      if (r.due && !isDate(r.due)) warnings.push(`${where}: 기한이 ${DATE_RE.test(r.due) ? "없는 날짜" : "날짜가 아님"}('${r.due}') — pm risk set ${i + 1} --due YYYY-MM-DD`);
       checkMark(`risks[${i + 1}]`, r.checked);
     });
     const text = JSON.stringify(p);
@@ -759,9 +765,10 @@ function joinDueWords(args) {
     args.due = `${args.due} 주`;
   }
 }
+// --due를 썼는데 값이 없으면(다음이 다른 옵션이거나 끝) 사용법 오류
 function dueArg(args) {
-  if (args.due === undefined || args.due === true) return undefined;
-  return parseDue(String([].concat(args.due).at(-1)), "due");
+  if (args.due === undefined) return undefined;
+  return parseDue([].concat(args.due).at(-1), "due");
 }
 
 // 번호(목록 순서) 또는 제목 일부로 찾는다

@@ -554,7 +554,12 @@
   }
 
   // 기한: '10/16 · D-2', '10/12 · 2일 지남'. 날짜가 아닌 옛 값은 그대로
-  const dueOf = (row) => (row.dueInfo ? (row.dueInfo.late ? `<b>${esc(row.dueInfo.text)}</b>` : esc(row.dueInfo.text)) : "기한 없음");
+  const dueOf = (row) => (row.dueInfo ? (row.dueInfo.late ? `<b>${esc(row.dueInfo.text)}</b>` : esc(row.dueInfo.text)) : "없음");
+  // 최근에 정한 것(해결된 결정) 세 건
+  const recentDone = () => {
+    const done = (model.resolvedDecisions || []).slice(0, 3);
+    return done.length ? `\n\n최근 정한 것\n${done.map((d) => `• ${esc(d.title)} — ${esc(d.result)} (${window.PMForecast.monthDay(d.decidedAt)})`).join("\n")}` : "";
+  };
   function decisionReply(text) {
     const decisions = model.decisions || [];
     const target = decisions.find((d) => text.includes(d.title)) || null;
@@ -908,8 +913,9 @@
         guess: i.guess || undefined,
         stale: i.stale || undefined,
       })),
-      decisions: m.decisions.map(({ dueInfo, ...d }) => ({ ...d, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late })),
-      risks: m.risks.map(({ dueInfo, ...r }) => ({ ...r, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late })),
+      resolvedDecisions: (m.resolvedDecisions || []).slice(0, 10),
+      decisions: m.decisions.map(({ dueInfo, ...d }) => ({ ...d, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late, dueInvalid: !!dueInfo?.invalid })),
+      risks: m.risks.map(({ dueInfo, ...r }) => ({ ...r, dueLabel: dueInfo?.label || null, late: !!dueInfo?.late, dueInvalid: !!dueInfo?.invalid })),
       srs: m.project.srs
         ? {
             exists: m.project.srs.exists,
