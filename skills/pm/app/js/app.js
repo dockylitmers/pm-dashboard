@@ -662,7 +662,7 @@
 
     // 상태 칩 옆 이유 칩(누르면 그 화면으로). 리미 말풍선의 '살펴볼 신호' 수와 같은 목록
     const signalsHtml = health.signals.length
-      ? `<span class="signals">${health.signals.map((sg) => `<button class="chip sig ${sg.cls}" data-go="${esc(sg.view)}"${sg.anchor ? ` data-anchor="${esc(sg.anchor)}"` : ""}${sg.filter ? ` data-filter="${esc(sg.filter)}"` : ""} title="${esc(sg.text)}">${esc(sg.short)} →</button>`).join("")}</span>`
+      ? `<div class="signals" role="group" aria-label="살펴볼 신호">${health.signals.map((sg) => `<button class="chip sig ${sg.cls}" data-go="${esc(sg.view)}"${sg.anchor ? ` data-anchor="${esc(sg.anchor)}"` : ""}${sg.filter ? ` data-filter="${esc(sg.filter)}"` : ""} title="${esc(sg.text)}">${esc(sg.short)} →</button>`).join("")}</div>`
       : "";
 
     // 오늘 먼저 할 것 1~3개. 첫 행동이 이 화면의 기본(검은) 버튼이다
@@ -734,7 +734,8 @@
           <div>
             <div class="when">리미의 브리핑 · ${F.shortDate(today)}</div>
             ${freshLineHtml(model)}
-            <h2>${esc(project.name)} · 지금 상태 ${chip(health)}${signalsHtml}</h2>
+            <h2>${esc(project.name)} · 지금 상태 ${chip(health)}</h2>
+            ${signalsHtml}
             ${factsHtml}
             ${firstHtml}
             <div class="btn-row"><button class="btn small" data-open-limi>${icon("chat")}리미와 대화</button></div>

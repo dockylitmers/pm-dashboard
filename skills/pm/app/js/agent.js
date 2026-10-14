@@ -1161,6 +1161,11 @@
     }
   };
   window.addEventListener("scroll", compactFab, { passive: true });
+  // 스크롤하지 않아도 8초 뒤에는 접는다(첫 화면 오른쪽 아래 숫자를 오래 가리지 않게)
+  setTimeout(() => {
+    els.fab.classList.add("compact");
+    window.removeEventListener("scroll", compactFab);
+  }, 8000);
   els.fab.addEventListener("click", open);
   $("#chat-close").addEventListener("click", close);
   els.form.addEventListener("submit", (event) => {
