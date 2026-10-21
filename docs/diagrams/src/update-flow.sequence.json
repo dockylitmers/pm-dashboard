@@ -447,7 +447,7 @@
     "output": ".archify/sequence-update-flow-20261013-162751/update-flow.html",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/litmers-dev/pm-dashboard.git",
+      "url": "https://github.com/dockylitmers/pm-dashboard.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "186e546a2d6554487d58cb10e2cb55a2e39988fe"

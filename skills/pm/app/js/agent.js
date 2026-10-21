@@ -666,7 +666,7 @@
       return scheduleReply();
     if (/고객|대기|기다|회신|답|리마인드/.test(t)) return waitingReply();
     if (/위험|리스크|걱정|문제/.test(t)) return riskReply();
-    if (/이슈|버그|담당|누가|배정|roger|nai/.test(t)) return issuesReply();
+    if (/이슈|버그|담당|누가|배정/.test(t)) return issuesReply();
     if (/킥오프|준비|체크|없는|자료/.test(t)) return kickoffReply();
     if (/오늘|뭐부터|브리핑|요약|현황|상황|안녕|어때/.test(t)) {
       const items = App.briefing(model);

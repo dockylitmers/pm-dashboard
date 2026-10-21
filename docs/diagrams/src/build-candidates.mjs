@@ -8,7 +8,7 @@ const ts = process.argv[2];
 const ko = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude/skills/archify/examples/locales/ko.json"), "utf8"));
 // 상자의 근거 배지가 제품 용어 '출처'(값을 확인한 곳)와 겹치지 않게 '근거 코드'로 부른다
 ko["viewer.passport.sourceMarker"] = "근거 코드";
-const repository = { url: "https://github.com/litmers-dev/pm-dashboard.git", provider: "github", link_mode: "web", revision: process.argv[3] };
+const repository = { url: "https://github.com/dockylitmers/pm-dashboard.git", provider: "github", link_mode: "web", revision: process.argv[3] };
 const meta = (title, output) => ({ title, locale: "ko", translations: ko, output, quality_profile: "showcase", repository });
 
 const S = (p, line, end_line, label) => ({ path: p, ...(line ? { line } : {}), ...(end_line ? { end_line } : {}), ...(label ? { label } : {}) });

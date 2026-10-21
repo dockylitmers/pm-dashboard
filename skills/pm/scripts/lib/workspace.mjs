@@ -149,7 +149,7 @@ projects/*/update.json
 
 const README = (company) => `# PM 워크스페이스
 
-${company}의 외주 개발 프로젝트 PM 데이터입니다. [pm-dashboard](https://github.com/litmers-dev/pm-dashboard) 플러그인이 읽고 씁니다.
+${company}의 외주 개발 프로젝트 PM 데이터입니다. [pm-dashboard](https://github.com/dockylitmers/pm-dashboard) 플러그인이 읽고 씁니다.
 
 **이 저장소는 비공개로 둡니다.** 고객사 정보와 내부 메모가 들어 있습니다. 비밀번호·API 키·고객 개인정보는 넣지 않습니다.
 

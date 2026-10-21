@@ -114,7 +114,7 @@ PM 워크스페이스 저장소(PM의 비공개 저장소)와 GitHub 개발 저�
 
 ### 팀원과 같이 쓰려면?
 
-- **각자 할 일:** [처음 쓰는 PM](#처음-쓰는-pm)의 0~3단계를 한다. 이 저장소(litmers-dev/pm-dashboard)가 비공개라 litmers-dev 조직 관리자에게 읽기 권한을 먼저 요청한다.
+- **각자 할 일:** [처음 쓰는 PM](#처음-쓰는-pm)의 0~3단계를 한다.
 - **기본은 PM마다 워크스페이스 하나**다. 같은 프로젝트를 여러 PM이 함께 맡을 때만 워크스페이스 저장소를 공유한다. 각자 그 저장소를 내려받아 "PM 워크스페이스로 세팅해 줘"를 한 번 하고, "저장해 줘"·"최신으로 받아 줘"로 맞춘다.
   - 같은 항목을 동시에 고치면 git 충돌이 날 수 있으니 프로젝트나 항목 단위로 담당을 나눈다.
   - 자동 전체 업데이트는 그 워크스페이스에서 한 사람만 켠다.
@@ -187,7 +187,7 @@ PM 워크스페이스 저장소(PM의 비공개 저장소)와 GitHub 개발 저�
 | Claude Code | [claude.com/claude-code](https://claude.com/claude-code)에서 설치하고 터미널에서 `claude`를 한 번 실행해 로그인한다. Claude 구독(Pro·Max·Team 등) 또는 API 키가 필요하다 |
 | Node 18 이상 | `node -v`. 없으면 `brew install node` |
 | GitHub CLI | `brew install gh` → `gh auth login` → `gh auth setup-git` |
-| 권한 | litmers-dev/pm-dashboard 읽기 권한(litmers-dev 조직 관리자에게 요청), 맡은 프로젝트 개발 저장소 읽기 권한(그 저장소 관리자에게 요청) |
+| 권한 | 맡은 프로젝트 개발 저장소 읽기 권한(그 저장소 관리자에게 요청) |
 | macOS | 자동 실행은 macOS만 지원한다. 다른 OS에서는 crontab에 넣을 줄을 알려 준다 |
 
 ### 1. 플러그인 설치 (컴퓨터마다 한 번, 직접 입력)
@@ -195,11 +195,11 @@ PM 워크스페이스 저장소(PM의 비공개 저장소)와 GitHub 개발 저�
 Claude Code 입력창에서:
 
 ```
-/plugin marketplace add litmers-dev/pm-dashboard
+/plugin marketplace add dockylitmers/pm-dashboard
 /plugin install pm-dashboard@pm-dashboard
 ```
 
-비공개 저장소라 위 권한이 있는 GitHub 계정으로 이 컴퓨터의 git이 접근할 수 있어야 한다(0단계의 `gh auth setup-git`). 새 버전은 `/plugin marketplace update pm-dashboard`로 받는다.
+공개 저장소라 따로 권한을 받지 않아도 설치된다. 새 버전은 `/plugin marketplace update pm-dashboard`로 받는다.
 
 ### 2. 연결 세팅 (컴퓨터마다 한 번)
 
